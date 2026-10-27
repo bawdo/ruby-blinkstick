@@ -1,0 +1,50 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem, use the private
+        report in SECURITY.md instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Code to reproduce
+      description: The smallest snippet that shows the problem.
+      render: ruby
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options: [Nano, Square, Other or unknown]
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, Linux]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Gem, Ruby and operating system.
+      placeholder: "ruby-blinkstick 0.0.1, Ruby 3.4.8, macOS 26"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: The full error and backtrace.
+      render: text
