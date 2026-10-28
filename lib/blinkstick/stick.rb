@@ -9,6 +9,8 @@ module Blinkstick
   # {#close} still releases its OS handle, but call {#close} (or use the
   # block form of {Blinkstick.open}) rather than relying on that.
   class Stick
+    include Eeprom
+
     # @return [Info] the identity of this stick
     attr_reader :info
 
@@ -191,15 +193,18 @@ module Blinkstick
     #
     # @return [String] at least size bytes, the first being report_id
     def read(report_id, size)
-      transfer("reads") do
-        reply = @handle.read_feature(report_id, size)
-        unless reply.bytesize >= size && reply.getbyte(0) == report_id
-          raise Backend::TransferFailed,
-                "report #{report_id}: got #{reply.bytesize} of #{size} bytes, ID #{reply.getbyte(0).inspect}"
-        end
+      transfer("reads") { fetch(report_id, size) }
+    end
 
-        reply
+    # One read attempt, checked. The caller holds the lock.
+    def fetch(report_id, size)
+      reply = @handle.read_feature(report_id, size)
+      unless reply.bytesize >= size && reply.getbyte(0) == report_id
+        raise Backend::TransferFailed,
+              "report #{report_id}: got #{reply.bytesize} of #{size} bytes, ID #{reply.getbyte(0).inspect}"
       end
+
+      reply
     end
 
     # Holds the lock across every attempt, so transfers from other threads

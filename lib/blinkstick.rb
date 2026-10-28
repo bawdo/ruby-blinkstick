@@ -5,6 +5,7 @@ require_relative "blinkstick/errors"
 require_relative "blinkstick/colour"
 require_relative "blinkstick/model"
 require_relative "blinkstick/report"
+require_relative "blinkstick/stick/eeprom"
 require_relative "blinkstick/stick"
 
 # Finds and drives BlinkStick Nano and Square USB LED sticks on macOS and Linux.
