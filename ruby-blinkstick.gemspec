@@ -27,4 +27,6 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir["lib/**/*.rb", "udev/*"] + %w[LICENSE README.md CHANGELOG.md CAPABILITIES.md]
   spec.require_paths = ["lib"]
+
+  spec.add_dependency "ffi", "~> 1.17", ">= 1.17.3"
 end
