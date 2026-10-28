@@ -50,9 +50,9 @@ Then unplug and replug the stick (or reboot). This grants access to whoever is l
 desktop (via systemd-logind's `uaccess`), not a udev group, so no group membership or new login
 session is needed beyond replugging the device.
 
-The rule only grants the `hidraw` node, which is all this gem uses. If you use a tool that talks
-to the stick through libusb (such as the official Python `blinkstick` package), add this line to
-the rule as well:
+The rule only grants the `hidraw` node, which is all this gem will use. If you use a tool that
+talks to the stick through libusb (such as the official Python `blinkstick` package), add this
+line to the rule as well:
 
 ```
 SUBSYSTEM=="usb", ATTR{idVendor}=="20a0", ATTR{idProduct}=="41e5", TAG+="uaccess"
