@@ -83,9 +83,10 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
     REPORT = ("\x06\x00".b + ("\x01".b * 24)).freeze
     NOT_ATTACHED = 0xE00002D9 - SIGNED
 
-    # Every Native function that touches a device. Each test replaces all of
-    # them, so a missed stub fails instead of reaching IOKit.
-    DEVICE_CALLS = %i[hid_device_open hid_device_close hid_device_set_report].freeze
+    # Every Native function that touches a device, including the retain and
+    # release of its reference. Each test replaces all of them, so a missed
+    # stub fails instead of reaching IOKit or CoreFoundation.
+    DEVICE_CALLS = %i[cf_retain cf_release hid_device_open hid_device_close hid_device_set_report].freeze
 
     WRITE_ERRORS = {
       NOT_ATTACHED => Blinkstick::DisconnectedError,
@@ -99,19 +100,19 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       0xE00002BC => [Blinkstick::Error, "the OS refused"]
     }.freeze
 
-    def test_close_is_idempotent_and_never_raises
-      calls = with_native(hid_device_close: NOT_ATTACHED) do
+    def test_close_closes_then_releases_once_and_never_raises
+      calls = with_native(hid_device_close: NOT_ATTACHED, cf_release: nil) do
         handle = new_handle
 
         assert_nil handle.close
         assert_nil handle.close
       end
 
-      assert_equal [[:hid_device_close, [ref, 0]]], calls
+      assert_equal [[:hid_device_close, [ref, 0]], [:cf_release, [ref]]], calls
     end
 
     def test_write_after_close_raises_closed
-      with_native(hid_device_close: 0) do
+      with_native(hid_device_close: 0, cf_release: nil) do
         handle = new_handle
         handle.close
         error = assert_raises(Blinkstick::ClosedError) { handle.write_feature(REPORT) }
@@ -136,17 +137,23 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       end
     end
 
-    def test_open_returns_a_handle_on_the_listed_ref
-      calls = with_native(hid_device_open: 0) do
-        assert_instance_of IOKit::Handle, IOKit.new.open(device)
+    # The handle owns its own retain, so the listed AutoPointer releasing
+    # its reference (at exit, say) cannot free a device that is still open.
+    def test_open_retains_the_ref_and_the_handle_releases_it
+      calls = with_native(cf_retain: retained, hid_device_open: 0, hid_device_close: 0, cf_release: nil) do
+        handle = IOKit.new.open(device)
+
+        assert_instance_of IOKit::Handle, handle
+        handle.close
       end
 
-      assert_equal [[:hid_device_open, [ref, 0]]], calls
+      assert_equal [[:cf_retain, [ref]], [:hid_device_open, [retained, 0]], [:hid_device_close, [retained, 0]],
+                    [:cf_release, [retained]]], calls
     end
 
     def test_open_failures_map_with_a_reason
       OPEN_ERRORS.each do |code, (expected, reason)|
-        with_native(hid_device_open: code - SIGNED) do
+        with_native(cf_retain: retained, hid_device_open: code - SIGNED, cf_release: nil) do
           error = assert_raises(expected) { IOKit.new.open(device) }
 
           assert_instance_of expected, error
@@ -155,11 +162,25 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       end
     end
 
+    def test_failed_open_releases_the_retain
+      calls = with_native(cf_retain: retained, hid_device_open: NOT_ATTACHED, cf_release: nil) do
+        assert_raises(Blinkstick::NotFoundError) { IOKit.new.open(device) }
+      end
+
+      assert_equal [[:cf_retain, [ref]], [:hid_device_open, [retained, 0]], [:cf_release, [retained]]], calls
+    end
+
     private
 
     # A pointer that is never dereferenced: only stubs ever receive it.
     def ref
       @ref ||= FFI::Pointer.new(1)
+    end
+
+    # What the stubbed CFRetain hands back, distinct from ref so the tests
+    # can tell which reference each call was given.
+    def retained
+      @retained ||= FFI::Pointer.new(2)
     end
 
     def device

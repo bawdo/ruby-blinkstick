@@ -12,8 +12,9 @@ module Blinkstick
     # CoreFoundation ownership follows Apple's Create rule: anything returned
     # by a Create or Copy call is released here, and anything returned by a
     # Get call is borrowed. Each listed device reference is retained, and
-    # released by its FFI::AutoPointer once nothing (a {Device} or an open
-    # {Handle}) refers to it.
+    # released by its FFI::AutoPointer once no {Device} refers to it. {#open}
+    # takes a second retain that the {Handle} owns and releases on close, so
+    # an open device outlives the AutoPointer whatever order finalisers run in.
     #
     # @api private
     class IOKit
@@ -187,7 +188,8 @@ module Blinkstick
 
       # An open IOHIDDevice.
       class Handle
-        # @param device [FFI::Pointer] the retained IOHIDDeviceRef, kept alive while open
+        # @param device [FFI::Pointer] an IOHIDDeviceRef retained for this handle, which
+        #   releases it on {#close}
         # @param serial [String, nil] named in error messages
         def initialize(device, serial: nil)
           @device = device
@@ -211,14 +213,19 @@ module Blinkstick
           raise IOKit.error_for(code), "#{name}: writing a report failed (#{IOKit.describe(code)})"
         end
 
-        # Closes the device. Calling it again does nothing, and it never raises.
+        # Closes the device, then releases the reference the handle owns.
+        # Calling it again does nothing, and it never raises.
         #
         # @return [void]
         def close
           return if @closed
 
           @closed = true
-          Native.hid_device_close(@device, OPEN_OPTIONS)
+          begin
+            Native.hid_device_close(@device, OPEN_OPTIONS)
+          ensure
+            Native.release(@device)
+          end
           nil
         end
 
@@ -242,16 +249,23 @@ module Blinkstick
         keys&.each_value { |key| Native.release(key) }
       end
 
+      # Retains the device reference for the handle, so the handle never
+      # depends on the listed {Device} staying alive. The retain is released
+      # here if the open fails, and by {Handle#close} otherwise.
+      #
       # @param device [Device] a device from {#list}
       # @return [Handle]
       # @raise [NotFoundError, PermissionError, BusyError] when it cannot be opened
       def open(device)
-        code = Native.hid_device_open(device.id, OPEN_OPTIONS)
-        return Handle.new(device.id, serial: device.serial) if code.zero?
+        ref = Native.cf_retain(device.id)
+        code = Native.hid_device_open(ref, OPEN_OPTIONS)
+        return handle = Handle.new(ref, serial: device.serial) if code.zero?
 
         error = IOKit.open_error_for(code)
         reason = OPEN_REASONS.fetch(error, "the OS refused")
         raise error, "Could not open #{device.serial}: #{reason} (#{IOKit.describe(code)})"
+      ensure
+        Native.release(ref) unless handle
       end
 
       private
