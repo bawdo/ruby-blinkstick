@@ -20,6 +20,15 @@ module Blinkstick
         (3 << 30) | (length << 16) | (0x48 << 8) | 0x06
       end
 
+      # The ioctl request number for HIDIOCGFEATURE of the given length:
+      # direction read/write (3), size, type 'H' (0x48) and number 7.
+      #
+      # @param length [Integer] report size in bytes, including the ID byte
+      # @return [Integer]
+      def self.get_feature_request(length)
+        (3 << 30) | (length << 16) | (0x48 << 8) | 0x07
+      end
+
       # An open hidraw node.
       class Handle
         # @param io [#ioctl, #close] the open device node
@@ -37,15 +46,26 @@ module Blinkstick
         # @raise [DisconnectedError] when the stick is unplugged
         # @raise [TransferFailed] for any other failed transfer
         def write_feature(report)
-          raise ClosedError, "#{name} is closed" if @closed
+          transfer { @io.ioctl(Hidraw.set_feature_request(report.bytesize), report.dup) }
+        end
 
-          @io.ioctl(Hidraw.set_feature_request(report.bytesize), report.dup)
-        rescue Errno::ENODEV, Errno::ENOENT, Errno::ESHUTDOWN => e
-          raise DisconnectedError, "#{name} was unplugged (#{e.class})"
-        rescue Errno::EACCES, Errno::EPERM => e
-          raise PermissionError, "#{name}: #{e.message}. #{UDEV_HINT}"
-        rescue SystemCallError => e
-          raise TransferFailed, "#{name}: #{e.message}"
+        # Reads a feature report from the stick.
+        #
+        # @param report_id [Integer] the report to ask for
+        # @param size [Integer] bytes to ask for, including the ID byte
+        # @return [String] binary String of the bytes the OS returned, the
+        #   report ID first (empty when it returned none)
+        # @raise [ClosedError] after {#close}
+        # @raise [DisconnectedError] when the stick is unplugged
+        # @raise [TransferFailed] for any other failed transfer
+        def read_feature(report_id, size)
+          transfer do
+            buffer = ("\x00".b * size)
+            buffer.setbyte(0, report_id)
+            count = @io.ioctl(Hidraw.get_feature_request(size), buffer)
+            # IO#ioctl may grow the buffer, so trust its return value, not the length.
+            count.positive? ? buffer.byteslice(0, count) : "".b
+          end
         end
 
         # Releases the node. Calling it again does nothing, and it never raises.
@@ -63,6 +83,19 @@ module Blinkstick
         end
 
         private
+
+        # Runs one transfer, mapping the OS's errors onto ours.
+        def transfer
+          raise ClosedError, "#{name} is closed" if @closed
+
+          yield
+        rescue Errno::ENODEV, Errno::ENOENT, Errno::ESHUTDOWN => e
+          raise DisconnectedError, "#{name} was unplugged (#{e.class})"
+        rescue Errno::EACCES, Errno::EPERM => e
+          raise PermissionError, "#{name}: #{e.message}. #{UDEV_HINT}"
+        rescue SystemCallError => e
+          raise TransferFailed, "#{name}: #{e.message}"
+        end
 
         def name
           @serial || "the stick"

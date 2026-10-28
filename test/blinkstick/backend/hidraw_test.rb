@@ -135,6 +135,80 @@ class HidrawTest < Minitest::Test
   end
 end
 
+# Reading goes through the same handle, with an io that fills the buffer.
+class HidrawReadTest < Minitest::Test
+  Hidraw = Blinkstick::Backend::Hidraw
+
+  # Fills the buffer like the kernel does. It can also append a byte, as
+  # Ruby's IO#ioctl may, so a caller trusting buffer.bytesize is caught out.
+  class ReadIO
+    attr_reader :calls
+
+    def initialize(data, returns: data.bytesize, overflow: nil)
+      @data = data
+      @returns = returns
+      @overflow = overflow
+      @calls = []
+    end
+
+    def ioctl(request, buffer)
+      @calls << [request, buffer.getbyte(0), buffer.bytesize]
+      buffer[0, @data.bytesize] = @data
+      buffer << @overflow if @overflow
+      @returns
+    end
+  end
+
+  def test_get_feature_request_codes
+    assert_equal 0xC01A4807, Hidraw.get_feature_request(26)
+    assert_equal 0xC0024807, Hidraw.get_feature_request(2)
+    assert_equal 0xC0214807, Hidraw.get_feature_request(33)
+  end
+
+  def test_read_passes_request_and_buffer
+    data = "\x06\x00".b + ("\x07".b * 24)
+    io = ReadIO.new(data)
+    result = Hidraw::Handle.new(io).read_feature(6, 26)
+
+    assert_equal data, result
+    assert_equal Encoding::BINARY, result.encoding
+    assert_equal [[0xC01A4807, 6, 26]], io.calls
+  end
+
+  def test_read_slices_by_the_return_value_not_the_buffer_length
+    data = "\x06\x00".b + ("\x07".b * 24)
+    io = ReadIO.new(data, overflow: "\x00".b)
+
+    assert_equal data, Hidraw::Handle.new(io).read_feature(6, 26)
+  end
+
+  def test_read_short
+    io = ReadIO.new("\x06\x00".b + ("\x07".b * 24), returns: 10)
+
+    assert_equal 10, Hidraw::Handle.new(io).read_feature(6, 26).bytesize
+  end
+
+  def test_read_nothing_returns_an_empty_binary_string
+    result = Hidraw::Handle.new(ReadIO.new("".b, returns: 0)).read_feature(6, 26)
+
+    assert_equal [0, Encoding::BINARY], [result.bytesize, result.encoding]
+  end
+
+  def test_read_errors_map
+    HidrawTest::WRITE_ERRORS.each do |errno, expected|
+      handle = Hidraw::Handle.new(HidrawTest::FakeIO.new(error: errno))
+      assert_raises(expected, errno.name) { handle.read_feature(6, 26) }
+    end
+  end
+
+  def test_read_after_close
+    handle = Hidraw::Handle.new(HidrawTest::FakeIO.new)
+    handle.close
+
+    assert_raises(Blinkstick::ClosedError) { handle.read_feature(6, 26) }
+  end
+end
+
 # Listing reads sysfs only, so these run on any OS against fixtures.
 class HidrawListTest < Minitest::Test
   Hidraw = Blinkstick::Backend::Hidraw
