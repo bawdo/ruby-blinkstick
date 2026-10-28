@@ -8,11 +8,13 @@ Gem::Specification.new do |spec|
   spec.authors = ["Keith Bawden"]
   spec.email = ["keith@arrix.com.au"]
 
-  spec.summary = "Drive BlinkStick Nano and Square USB LEDs from Ruby."
+  spec.summary = "Find and light BlinkStick Nano and Square USB LEDs from Ruby, on macOS and Linux."
   spec.description = <<~DESC.tr("\n", " ").strip
-    Drive BlinkStick Nano and Square USB LEDs from Ruby. Unofficial, and not
-    affiliated with Agile Innovative. Releases before the implementation lands
-    are placeholders that reserve the gem name.
+    Find, open and set the colour of BlinkStick Nano and Square USB LEDs from
+    Ruby, on macOS and Linux. Lists attached sticks, opens one by serial, sets
+    every LED from hex, r,g,b or CSS colour names, and turns them off. Nothing
+    to install but the gem. Unofficial, and not affiliated with Agile
+    Innovative.
   DESC
   spec.homepage = "https://github.com/bawdo/ruby-blinkstick"
   spec.license = "MIT"

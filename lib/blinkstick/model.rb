@@ -15,8 +15,13 @@ module Blinkstick
     end
   end
 
+  # The BlinkStick Nano: two LEDs.
   Model::NANO = Model.new(name: "Nano", leds: 2)
+
+  # The BlinkStick Square: eight LEDs.
   Model::SQUARE = Model.new(name: "Square", leds: 8)
+
+  # Any other stick: listed, but refused by {Blinkstick.open}. It has no LEDs here.
   Model::UNKNOWN = Model.new(name: "unknown", leds: 0)
 
   # Maps [serial major version, USB bcdDevice] to a {Model}. A Square

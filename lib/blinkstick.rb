@@ -7,7 +7,9 @@ require_relative "blinkstick/model"
 require_relative "blinkstick/report"
 require_relative "blinkstick/stick"
 
-# Finds and drives BlinkStick Nano and Square USB LED sticks.
+# Finds and drives BlinkStick Nano and Square USB LED sticks on macOS and Linux.
+#
+# Requiring the gem touches no device; the OS backend loads on first use.
 #
 #   Blinkstick.open do |stick|
 #     stick.colour = :cornflowerblue
