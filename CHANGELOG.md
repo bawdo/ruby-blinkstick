@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Names: `Stick#name` and `Stick#name=` (stored in info block 1), `Blinkstick.open(name:)` and `Blinkstick.list(names: true)`, which returns `NamedInfo` values. `DuplicateNameError` is raised when two sticks share a name.
+- `Stick#write_info_block` writes info block 1 or 2 (EEPROM).
+- `Stick#mode=` sets the mode to `:ws2812` or `:ws2812_mirror` (EEPROM), and skips the write when the stick is already in it. After a write it waits until the stick answers with the new mode (it stops answering for 12 to 15 ms after a mode write), raising `DisconnectedError` after 250 ms. The Pro modes are refused.
+- `Stick#brightness_limit` and `Stick#brightness_limit=` cap the brightness of every colour written.
+- `Stick#inverse?`, `Stick#inverse=` and `Colour#inverse` flip colours for LEDs wired so 255 is off.
+- `Colour.random` and `Colour.random(vivid: true)`.
+- `Stick#blink`, `Stick#pulse`, `Stick#morph` and `Blinkstick::Cancellation`. Effects return `true` when they finish and `false` when cancelled.
+- `Info#release`, the USB release number the model is worked out from. It is the last member and defaults to `nil`, so building an `Info` the 0.2.0 way still works.
+- Reconnect after an unplug: a stick that stops answering is found again by its serial and the last frame is repainted. A stick whose serial is shared with another attached stick never reconnects.
+
+### Changed
+
+- `Stick#[]=` checks the index before the colour, so a call with both wrong raises `IndexError`. The first `[]=` on a fresh `Stick` reads the frame once.
+- `DisconnectedError` now means the stick stopped responding and reconnecting to it failed, not just that three attempts failed.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added

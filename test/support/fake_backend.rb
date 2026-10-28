@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "fake_backend_handle"
+
 # A backend that simulates attached sticks, for tests. It records every
 # report written to each handle it opens, and answers reads from the state
 # those writes leave behind.
@@ -7,147 +9,64 @@ class FakeBackend
   Device = Blinkstick::Backend::Device
   Report = Blinkstick::Report
 
-  # A simulated open device.
-  #
-  # Switches, all optional: fail_writes, fail_reads, short_reads and
-  # wrong_id_reads are how many attempts in a row go wrong before the fake
-  # behaves (raising TransferFailed, returning one byte too few, or
-  # returning the wrong first byte); gone makes every transfer raise
-  # DisconnectedError; mode is the mode byte; info_blocks maps 1 and 2 to
-  # the stored text.
-  class Handle
-    FAILURES = %i[fail_writes fail_reads short_reads wrong_id_reads].freeze
+  # The backend every test starts with, so a test that forgets to install a
+  # FakeBackend fails loudly instead of reaching the real stick attached to
+  # the machine running the tests.
+  class Refusing
+    # Raised by every call. Deliberately outside Blinkstick::Error, so no
+    # rescue in the gem or assert_raises in a test can swallow it.
+    class NoBackend < StandardError; end
 
-    # Reports kept in EEPROM: info blocks 1 and 2, and the mode.
-    EEPROM_IDS = [2, 3, Report::MODE_ID].freeze
+    MESSAGE = "no backend installed for this test: include FakeBackend::Installer " \
+              "and call install_backend (the real stick is never used by tests)"
 
-    # Raised for a write the gem must never send. Deliberately outside
-    # Blinkstick::Error, so no rescue in the gem or assert_raises in a test
-    # can swallow it.
-    class EepromWrite < StandardError; end
+    def list
+      raise NoBackend, MESSAGE
+    end
 
-    # leds is replaced, never changed in place, so a reference a test holds
-    # stays as it was. attempts counts every write_feature and read_feature
-    # call, failed or not; writes_by_id counts the writes recorded and
-    # reads_by_id the reads that returned a well formed reply, per report ID.
-    attr_reader :device, :writes, :stream, :attempts, :writes_by_id, :reads_by_id
-    attr_accessor :leds
+    def open(_device)
+      raise NoBackend, MESSAGE
+    end
+  end
 
-    def initialize(device, mode: 2, info_blocks: { 1 => "".b, 2 => "".b }, gone: false, **failures)
-      @device = device
+  # The one Refusing backend, which test_helper installs and Installer puts back.
+  REFUSING = Refusing.new.freeze
+
+  # What a device keeps whatever handles come and go: its EEPROM (mode and
+  # info blocks), its LEDs, whether it is plugged in, the handles opened on
+  # it, and how many more transfers it refuses after a mode write
+  # (busy_left). leds is replaced, never changed in place, so a reference a
+  # test holds stays as it was.
+  class DeviceState
+    DARK = Array.new(8, Blinkstick::Colour::OFF).freeze
+
+    attr_accessor :mode, :info_blocks, :refusal, :leds, :busy_left
+    attr_reader :handles, :queued
+
+    def initialize(mode:, info_blocks:)
       @mode = mode
-      @info_blocks = info_blocks
-      @gone = gone
-      @failures_left = check_failures(failures)
-      @leds = Array.new(8, Blinkstick::Colour::OFF)
-      @closed = false
-      start_records
+      @info_blocks = info_blocks.dup
+      @leds = DARK
+      @plugged = true
+      @refusal = nil
+      @busy_left = 0
+      @handles = []
+      @queued = []
     end
 
-    # Records the report one byte at a time, yielding the thread between
-    # bytes, so two writes that are not serialised by the caller interleave
-    # in #stream. There is deliberately no lock here. Refuses EEPROM reports
-    # outright, failing whichever test sent one.
-    def write_feature(report)
-      raise EepromWrite, "report #{report.getbyte(0)} writes EEPROM" if EEPROM_IDS.include?(report.getbyte(0))
-
-      start(:fail_writes)
-      report.each_byte do |byte|
-        @stream << byte
-        Thread.pass
-      end
-      @writes << report
-      apply(report)
+    def plugged?
+      @plugged
     end
 
-    # Builds the reply one LED at a time, yielding the thread between them
-    # and again before returning, so a read that is not serialised against
-    # writes by the caller can see two frames mixed. Never touches #stream,
-    # which is for writes. There is deliberately no lock here.
-    def read_feature(report_id, size)
-      start(:fail_reads)
-      reply = reply_for(report_id)
-      Thread.pass
-      return reply.byteslice(0, size - 1) if use_up?(:short_reads)
-      return reply.dup.tap { |bytes| bytes.setbyte(0, report_id ^ 0xff) } if use_up?(:wrong_id_reads)
-
-      @reads_by_id[report_id] += 1
-      reply
+    def unplug
+      @plugged = false
+      @handles.each(&:unplug)
     end
 
-    def close
-      @closed = true
-    end
-
-    def closed?
-      @closed
-    end
-
-    private
-
-    def check_failures(failures)
-      unknown = failures.keys - FAILURES
-      raise ArgumentError, "unknown fake switches: #{unknown.inspect}" unless unknown.empty?
-
-      Hash.new(0).merge(failures)
-    end
-
-    def start_records
-      @writes = []
-      @stream = []
-      @attempts = 0
-      @writes_by_id = Hash.new(0)
-      @reads_by_id = Hash.new(0)
-    end
-
-    # The checks every transfer makes before doing anything.
-    def start(failure)
-      raise Blinkstick::ClosedError, "fake handle closed" if @closed
-
-      @attempts += 1
-      raise Blinkstick::DisconnectedError, "#{device.serial} unplugged" if @gone
-      raise Blinkstick::Backend::TransferFailed, "#{device.serial} busy" if use_up?(failure)
-    end
-
-    # @return [Boolean] true, using one up, while the named failure has any left
-    def use_up?(failure)
-      (@failures_left[failure] -= 1) >= 0
-    end
-
-    def reply_for(report_id)
-      case report_id
-      when Report::FRAME_ID then frame_reply
-      when Report::MODE_ID then [Report::MODE_ID, @mode].pack("C*")
-      when 2, 3 then info_block_reply(report_id)
-      else raise ArgumentError, "the fake has no report #{report_id}"
-      end
-    end
-
-    # Looks @leds up afresh for each LED, so a write landing part way
-    # through shows up in the later LEDs only.
-    def frame_reply
-      Report.frame(Array.new(8) do |i|
-        Thread.pass
-        @leds[i]
-      end)
-    end
-
-    def info_block_reply(report_id)
-      [report_id].pack("C") + @info_blocks.fetch(report_id - 1).b.ljust(Report::INFO_BLOCK_SIZE - 1, "\0")
-    end
-
-    # Mirrors the LED state a recorded report leaves on the stick.
-    def apply(report)
-      id = report.getbyte(0)
-      @writes_by_id[id] += 1
-      case id
-      when Report::FRAME_ID then @leds = Report.decode_frame(report, 8)
-      when Report::LED_ID then @leds = @leds.dup.tap { |leds| leds[report.getbyte(2)] = rgb(report) }
-      end
-    end
-
-    def rgb(report)
-      Blinkstick::Colour.new(red: report.getbyte(3), green: report.getbyte(4), blue: report.getbyte(5))
+    # A replugged stick starts dark.
+    def replug
+      @plugged = true
+      @leds = DARK
     end
   end
 
@@ -173,37 +92,95 @@ class FakeBackend
 
   attr_reader :handles
 
-  # @param switches [Hash] passed to every Handle this backend opens
+  # @param switches [Hash] failure switches (fail_writes and so on, gone or
+  #   busy_after_mode) for the first Handle opened per device; later opens are clean unless
+  #   #next_open queued some
+  # @param eeprom_writes [Boolean] let handles accept reports 2, 3 and 4
+  # @param mode [Integer] every device's starting mode byte
+  # @param info_blocks [Hash] every device's starting info blocks
   def initialize(*devices, busy: false, permission_denied: false, **switches)
     @devices = devices
     @busy = busy
     @permission_denied = permission_denied
+    @eeprom_writes = switches.delete(:eeprom_writes) || false
+    eeprom = { mode: switches.delete(:mode) || 2,
+               info_blocks: switches.delete(:info_blocks) || { 1 => "".b, 2 => "".b } }
     @switches = switches
     @handles = []
+    @states = devices.to_h { |device| [device.serial, DeviceState.new(**eeprom)] }
   end
 
   def list
-    @devices
+    @devices.select { |device| @states.fetch(device.serial).plugged? }
   end
 
   def open(device)
-    raise Blinkstick::BusyError, "#{device.serial} is seized by another program" if @busy
-    raise Blinkstick::PermissionError, "#{device.serial}: permission denied" if @permission_denied
+    state = @states.fetch(device.serial)
+    check_openable(device, state)
 
-    Handle.new(device, **@switches).tap { |handle| @handles << handle }
+    Handle.new(device, state, eeprom_writes: @eeprom_writes, **switches_for(state)).tap do |handle|
+      state.handles << handle
+      @handles << handle
+    end
+  end
+
+  # Sets one device's stored EEPROM state; nil leaves a part as it is.
+  def store(serial, mode: nil, info_blocks: nil)
+    state = @states.fetch(serial)
+    state.mode = mode unless mode.nil?
+    state.info_blocks = info_blocks.dup unless info_blocks.nil?
+  end
+
+  # Queues switches for the next open of this serial only.
+  def next_open(serial, **switches)
+    @states.fetch(serial).queued << switches
+  end
+
+  # The device leaves #list and its open handles raise DisconnectedError.
+  def unplug(serial)
+    @states.fetch(serial).unplug
+  end
+
+  # The device is listed again, with every LED dark.
+  def replug(serial)
+    @states.fetch(serial).replug
+  end
+
+  # Makes opens of this serial raise error_class; nil clears it.
+  def refuse(serial, error_class)
+    @states.fetch(serial).refusal = error_class
+  end
+
+  # @return [Array<Handle>] the handles opened on this serial, in order
+  def handles_for(serial)
+    @states.fetch(serial).handles.dup
   end
 
   # Installs a FakeBackend as Blinkstick::Backend.current for one test and
-  # puts the previous backend back afterwards.
+  # puts the Refusing backend back afterwards, never the real one.
   module Installer
     def install_backend(backend)
-      @previous_backend = Blinkstick::Backend.instance_variable_get(:@current) unless defined?(@previous_backend)
       Blinkstick::Backend.current = backend
     end
 
     def teardown
-      Blinkstick::Backend.current = @previous_backend if defined?(@previous_backend)
+      Blinkstick::Backend.current = REFUSING
       super
     end
+  end
+
+  private
+
+  def check_openable(device, state)
+    raise state.refusal, "#{device.serial} refused" if state.refusal
+    # As hidraw does when the device node is gone (ENOENT or ENODEV).
+    raise Blinkstick::NotFoundError, "#{device.serial} is no longer attached" unless state.plugged?
+    raise Blinkstick::BusyError, "#{device.serial} is seized by another program" if @busy
+    raise Blinkstick::PermissionError, "#{device.serial}: permission denied" if @permission_denied
+  end
+
+  def switches_for(state)
+    base = state.handles.empty? ? @switches : {}
+    base.merge(state.queued.shift || {})
   end
 end

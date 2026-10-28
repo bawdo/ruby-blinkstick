@@ -82,4 +82,46 @@ class ReportTest < Minitest::Test
     assert_equal "", Report.decode_info_block([2] + ([0] * 32))
     assert_equal "a\0b", Report.decode_info_block([2, 0x61, 0, 0x62] + ([0] * 29))
   end
+
+  def test_info_block_pads
+    report = Report.info_block(2, "ab".b)
+
+    assert_equal [3, 97, 98] + ([0] * 30), report.bytes
+    assert_predicate report, :frozen?
+    assert_equal Encoding::BINARY, report.encoding
+  end
+
+  def test_info_block_accepts_the_maximum_refuses_one_more
+    assert_equal 33, Report.info_block(1, "a".b * 32).bytesize
+    assert_raises(ArgumentError) { Report.info_block(1, "a".b * 33) }
+  end
+
+  def test_info_block_writes_utf8_bytes
+    assert_equal [2, 0xC3, 0xA9] + ([0] * 30), Report.info_block(1, "é").bytes
+  end
+
+  def test_mode_report
+    report = Report.mode(3)
+
+    assert_equal [4, 3], report.bytes
+    assert_predicate report, :frozen?
+    assert_equal Encoding::BINARY, report.encoding
+  end
+
+  def test_mode_refuses_bad_bytes
+    [-1, 256, "1", nil, 1.0].each { |byte| assert_raises(ArgumentError) { Report.mode(byte) } }
+  end
+
+  def test_decode_frame_refuses_short_input
+    assert_raises(ArgumentError) { Report.decode_frame([0] * 25, 8) }
+    assert_raises(ArgumentError) { Report.decode_frame("\0".b * 25, 8) }
+  end
+
+  def test_decode_mode_refuses_short_input
+    assert_raises(ArgumentError) { Report.decode_mode([4]) }
+  end
+
+  def test_decode_info_block_refuses_short_input
+    assert_raises(ArgumentError) { Report.decode_info_block([0] * 32) }
+  end
 end

@@ -87,21 +87,38 @@ class StickTest < Minitest::Test
     assert_equal [Report.frame([RED, RED])], handle.writes
   end
 
+  # Three failures drop the handle and reopen the stick by serial; nothing
+  # was written yet, so the new handle gets only the frame.
+  def test_three_failures_then_a_clean_reopen_succeeds
+    stick = open_stick(FakeBackend.nano, fail_writes: 3)
+
+    stick.colour = :red
+
+    first, second = @backend.handles
+
+    assert_equal [Blinkstick::Backend::ATTEMPTS, [], true], [first.attempts, first.writes, first.closed?]
+    assert_equal [Report.frame([RED, RED])], second.writes
+  end
+
   def test_three_failures_raise_disconnected
     stick = open_stick(FakeBackend.nano, fail_writes: 3)
+    @backend.next_open("BS000001-3.0", fail_writes: 3)
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.colour = :red }
 
-    assert_includes error.message, "BS000001-3.0"
-    assert_equal [Blinkstick::Backend::TransferFailed, Blinkstick::Backend::ATTEMPTS, []],
-                 [error.cause.class, handle.attempts, handle.writes]
+    assert_includes error.message, '"BS000001-3.0" stopped responding'
+    assert_equal [Blinkstick::Backend::TransferFailed, [[3, []], [3, []]]],
+                 [error.cause.class, @backend.handles.map { |h| [h.attempts, h.writes] }]
   end
 
+  # A handle that reports the stick gone is not retried, and an unplugged
+  # stick cannot be reopened.
   def test_gone_raises_disconnected_at_once
     stick = open_stick(FakeBackend.nano, gone: true)
+    @backend.unplug("BS000001-3.0")
 
     assert_raises(Blinkstick::DisconnectedError) { stick.colour = :red }
-    assert_equal 1, handle.attempts
+    assert_equal [1, 1], [@backend.handles.size, handle.attempts]
   end
 
   def test_concurrent_writers_never_interleave
@@ -130,5 +147,31 @@ class StickTest < Minitest::Test
   # counts the pieces that are not a whole frame of one shade.
   def torn_frames
     handle.stream.each_slice(Report::FRAME_SIZE).count { |bytes| !SHADE_FRAMES.include?(bytes.pack("C*")) }
+  end
+end
+
+# What Stick takes from its included modules, and what it keeps to itself.
+class StickInternalsTest < Minitest::Test
+  include FakeBackend::Installer
+
+  def teardown
+    @stick&.close
+    super
+  end
+
+  # A closed Stick no longer owns its handle, so it has none to hand over.
+  def test_detach_refuses_a_closed_stick
+    install_backend(FakeBackend.new(FakeBackend.nano))
+    @stick = Blinkstick.open
+    @stick.close
+
+    assert_raises(Blinkstick::ClosedError) { @stick.detach }
+  end
+
+  def test_included_module_constants_are_private
+    [-> { Blinkstick::Stick::STEP }, -> { Blinkstick::Stick::SETTABLE_MODES },
+     -> { Blinkstick::Stick::Effects::STEP }, -> { Blinkstick::Stick::Eeprom::SETTABLE_MODES }].each do |lookup|
+      assert_raises(NameError, &lookup)
+    end
   end
 end

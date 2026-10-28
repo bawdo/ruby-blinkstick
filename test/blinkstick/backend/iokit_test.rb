@@ -278,6 +278,18 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       end
     end
 
+    def test_read_feature_refuses_bad_arguments
+      calls = with_native(hid_device_get_report: answer(FRAME, 26)) do
+        handle = new_handle
+
+        [[6, 0], [256, 26], [-1, 26], [6, -1], [6, "26"], ["6", 26], [nil, 26]].each do |id, size|
+          assert_raises(ArgumentError) { handle.read_feature(id, size) }
+        end
+      end
+
+      refute_includes calls.map(&:first), :hid_device_get_report
+    end
+
     def test_read_after_close
       calls = with_native(hid_device_close: 0, cf_release: nil) do
         handle = new_handle

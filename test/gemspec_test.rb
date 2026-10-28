@@ -14,6 +14,14 @@ class GemspecTest < Minitest::Test
     DOCUMENTED_FILES.each { |file| assert_includes spec.files, file }
   end
 
+  # scripts/ holds maintainer tools, among them one that writes EEPROM.
+  def test_scripts_are_not_packaged
+    spec = Gem::Specification.load(File.join(ROOT, "ruby-blinkstick.gemspec"))
+
+    refute_includes spec.files, "scripts/eeprom-check.rb"
+    assert_empty spec.files.grep(%r{\Ascripts/})
+  end
+
   def test_missing_documented_file_fails_validation
     Dir.mktmpdir do |dir|
       copy_gem_without(dir, "LICENSE")

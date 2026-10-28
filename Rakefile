@@ -16,7 +16,7 @@ Rake::TestTask.new(:hardware_tests) do |t|
   t.description = "Run the hardware tests (internal; use the hardware task)"
 end
 
-desc "Run the hardware tests against attached BlinkSticks (writes colours only, never EEPROM)"
+desc "Run the hardware tests against attached BlinkSticks (colours, limit, inverse, effects; never EEPROM)"
 task :hardware do
   ENV["BLINKSTICK_HARDWARE"] = "1"
   Rake::Task[:hardware_tests].invoke

@@ -47,12 +47,52 @@ that decide a release: if the shared open or the shared read fails on macOS,
 the release stops. Attach a Nano and a Square for the full run; without both,
 the pair test skips with a message.
 
+The 0.3.0 checks cover, for every attached stick, the brightness limit (a
+limited write reads back scaled), inverse (the frame reads back as written
+while a second, plain handle on the same serial reads the flipped bytes), morph
+ending on its colour, blink and pulse ending off, an effect given an already
+cancelled `Blinkstick::Cancellation` returning `false` and changing nothing,
+`Blinkstick.list(names: true)` returning one entry per stick, and `info.release`
+matching the model (Nano `0x0202`, Square `0x0201`). They write colours only.
+
 Automated tests must never write EEPROM on a real stick: no name, info block
 or mode writes against hardware. EEPROM wears out, and a contributor's stick
 is theirs. These tests set colours and turn the stick off, nothing else.
 
 On Linux you need the udev rule from the `## Linux` section of the
 [README](README.md), then a replug, or the tests fail with a permission error.
+
+### EEPROM check before a release
+
+The automated tests never write EEPROM, so name, info block and mode writes get
+a manual check, once on each OS (macOS and Linux), with one stick attached. Only
+the maintainer runs it; `rake`, `rake hardware` and CI never do.
+
+```sh
+ruby -Ilib scripts/eeprom-check.rb SERIAL --yes-write-eeprom
+```
+
+It exits 2 with a usage message unless it gets both the serial and the
+`--yes-write-eeprom` flag. It also exits 2, writing nothing, when the serial
+matches no stick or more than one (it refuses an ambiguous serial rather than
+picking the first), and when the stick is not in mode 2 or 3 (`mode=` cannot
+restore modes 0 or 1).
+
+It saves both info blocks (block 1 holds the name) and the mode. It then writes
+the name `eeprom-check`, info block 2 `eeprom-check-2`, and the mode it is not
+in followed by its own, so two real mode writes happen, reading each back. It
+restores the saved blocks and mode last, byte for byte (including a name that
+is not valid UTF-8), even if a step fails, and prints a line for every write,
+read and restore. It exits 1 on any mismatch or failed restore, or when the gem
+raises an error (the stick is busy, say). A stick has been seen refusing
+transfers for 12 to 15 ms after each mode write, which `mode=` waits out (for up
+to 250 ms) before the script reads the mode back.
+
+Ctrl-C before the first write stops the script as usual. Ctrl-C during the
+writes stops them, the restore still runs, and the script then ends as
+interrupted, with no summary line. Ctrl-C during the restore is noted and the
+restore still runs to the end, then the script reports it and exits 1. The
+script is not part of the gem.
 
 ### Manual check before a release
 
@@ -64,6 +104,10 @@ Run this once on each OS (macOS and Linux) with a stick attached.
 2. Plug the stick back in and run `serial = Blinkstick.list.first.serial`.
    Unplug it again, then run `Blinkstick.open(serial: serial)`. Expect a
    `Blinkstick::NotFoundError`.
+3. Plug the stick back in, then run `stick = Blinkstick.open` and
+   `stick.colour = :green`. Unplug the stick and plug it back in, then run
+   `stick.mode`. Expect it to reconnect and return the mode, with the green
+   frame back on the LEDs.
 
 ## Changes
 

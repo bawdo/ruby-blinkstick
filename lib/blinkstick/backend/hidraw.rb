@@ -55,10 +55,15 @@ module Blinkstick
         # @param size [Integer] bytes to ask for, including the ID byte
         # @return [String] binary String of the bytes the OS returned, the
         #   report ID first (empty when it returned none)
+        # @raise [ArgumentError] unless size is a positive Integer and report_id is 0 to 255
         # @raise [ClosedError] after {#close}
         # @raise [DisconnectedError] when the stick is unplugged
         # @raise [TransferFailed] for any other failed transfer
         def read_feature(report_id, size)
+          unless size.is_a?(Integer) && size.positive? && report_id.is_a?(Integer) && report_id.between?(0, 255)
+            raise ArgumentError, "need report ID 0 to 255 and positive size, got #{report_id.inspect}, #{size.inspect}"
+          end
+
           transfer do
             buffer = ("\x00".b * size)
             buffer.setbyte(0, report_id)

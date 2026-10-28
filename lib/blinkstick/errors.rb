@@ -4,7 +4,7 @@ module Blinkstick
   # Base class for every error this gem raises on purpose.
   class Error < StandardError; end
 
-  # Raised when no BlinkStick matches the requested serial or index.
+  # Raised when no BlinkStick is attached, or none matches the requested serial or name.
   class NotFoundError < Error; end
 
   # Raised when another program has seized the stick (macOS only).
@@ -19,8 +19,12 @@ module Blinkstick
   # Raised when using a device after it has been closed.
   class ClosedError < Error; end
 
-  # Raised when the stick is unplugged or stops responding mid-use.
+  # Raised when the stick is unplugged or stops responding mid-use and
+  # reconnecting to it (by its serial) fails or cannot be tried.
   class DisconnectedError < Error; end
+
+  # Raised when more than one attached stick has the requested name.
+  class DuplicateNameError < Error; end
 
   # Raised when a value cannot be turned into a {Colour}.
   class InvalidColourError < ArgumentError; end
