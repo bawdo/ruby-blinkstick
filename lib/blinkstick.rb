@@ -6,7 +6,9 @@ require_relative "blinkstick/colour"
 require_relative "blinkstick/model"
 require_relative "blinkstick/report"
 require_relative "blinkstick/stick/eeprom"
+require_relative "blinkstick/stick/handover"
 require_relative "blinkstick/stick"
+require_relative "blinkstick/names"
 
 # Finds and drives BlinkStick Nano and Square USB LED sticks on macOS and Linux.
 #
@@ -22,29 +24,46 @@ module Blinkstick
   # Lists every attached BlinkStick, including models this gem cannot open
   # (their {Info#model} is {Model::UNKNOWN}).
   #
-  # @return [Array<Info>]
+  # With +names: true+ each stick is opened briefly to read its name and then
+  # closed, so a stick another program holds shows as busy with an empty name.
+  # Unknown models are opened too.
+  #
+  # @param names [Boolean] read each stick's name
+  # @return [Array<Info>, Array<NamedInfo>] NamedInfo when +names+ is true
   # @raise [Error] when the OS cannot list devices
-  def self.list
+  def self.list(names: false)
+    return list_named if names
+
     Backend.current.list.map { |device| info_for(device) }
   end
 
-  # Opens a BlinkStick: the one with the given serial, or else the first one
-  # found. If the first one found is an unknown model this raises, even when
-  # a supported stick is also attached; pass a serial from {list} to choose.
+  # Opens a BlinkStick: the one with the given serial, the one with the given
+  # name, or else the first one found. If the first one found is an unknown
+  # model this raises, even when a supported stick is also attached; pass a
+  # serial from {list} to choose.
   #
   # Without a block the caller must {Stick#close} the stick. With a block,
   # like File.open, the stick is yielded, closed afterwards even if the
   # block raises, and the block's value is returned.
   #
+  # By name, every stick is opened in turn and its name read (byte for byte);
+  # sticks that cannot be opened or read are skipped, and the others closed.
+  #
   # @param serial [String, nil] for example "BS072777-3.0"
+  # @param name [String, nil] a name stored on the stick, see {Stick#name=}
   # @yieldparam stick [Stick]
   # @return [Stick, Object] the stick, or the block's value
-  # @raise [NotFoundError] when no stick (or none with that serial) is attached
+  # @raise [ArgumentError] when both +serial+ and +name+ are given, or +name+ is empty
+  # @raise [TypeError] when +name+ is not a String
+  # @raise [NotFoundError] when no stick (or none with that serial or name) is attached;
+  #   for a name the message says why each skipped stick was skipped
+  # @raise [DuplicateNameError] when more than one stick has that name
   # @raise [UnsupportedModelError] when the stick's model is unknown
   # @raise [BusyError] when another program has seized the stick
   # @raise [PermissionError] when the OS refuses access
-  def self.open(serial: nil)
-    stick = open_stick(serial)
+  def self.open(serial: nil, name: nil)
+    check_selectors(serial, name)
+    stick = name.nil? ? open_stick(serial) : open_named(name)
     return stick unless block_given?
 
     begin
@@ -57,11 +76,21 @@ module Blinkstick
   # Checks the model before opening, so an unknown stick is never opened.
   def self.open_stick(serial)
     backend = Backend.current
-    device = find(backend.list, serial)
-    info = info_for(device)
-    raise UnsupportedModelError, "#{info.serial} is a model this gem does not support" unless info.model.supported?
+    build_stick(backend, find(backend.list, serial))
+  end
 
-    Stick.new(backend.open(device), info)
+  # The one place a Stick for a user is built, however it was found. Opens
+  # the device unless the caller already holds an open handle for it.
+  def self.build_stick(backend, device, handle = nil)
+    info = supported_info(device)
+    Stick.new(handle || backend.open(device), info)
+  end
+
+  # The model check, made before anything is opened.
+  def self.supported_info(device)
+    info_for(device).tap do |info|
+      raise UnsupportedModelError, "#{info.serial} is a model this gem does not support" unless info.model.supported?
+    end
   end
 
   def self.find(devices, serial)
@@ -75,5 +104,5 @@ module Blinkstick
               release: device.release)
   end
 
-  private_class_method :open_stick, :find, :info_for
+  private_class_method :open_stick, :build_stick, :supported_info, :find, :info_for
 end

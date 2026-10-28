@@ -22,6 +22,9 @@ module Blinkstick
   # Raised when the stick is unplugged or stops responding mid-use.
   class DisconnectedError < Error; end
 
+  # Raised when more than one attached stick has the requested name.
+  class DuplicateNameError < Error; end
+
   # Raised when a value cannot be turned into a {Colour}.
   class InvalidColourError < ArgumentError; end
 end

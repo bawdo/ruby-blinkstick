@@ -10,6 +10,7 @@ module Blinkstick
   # block form of {Blinkstick.open}) rather than relying on that.
   class Stick
     include Eeprom
+    include Handover
 
     # @return [Info] the identity of this stick
     attr_reader :info
