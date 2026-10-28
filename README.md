@@ -12,10 +12,11 @@ of BlinkStick.
 
 ## Status
 
-Version 0.1.0 finds a BlinkStick Nano or Square, opens it, sets every LED to a colour and
-turns them off, on macOS and Linux. Single LEDs, frames, effects and the rest are still to
-come. [CAPABILITIES.md](CAPABILITIES.md) lists what is supported now and the Ruby method for
-each feature.
+This gem finds a BlinkStick Nano or Square, opens it, sets every LED to a colour, sets one
+LED or the whole frame, reads LEDs, the mode and the info blocks back, and turns them off, on
+macOS and Linux. Effects, setting the mode and writing the info blocks are still to come. The
+per LED, frame and reading calls arrive in 0.2.0. [CAPABILITIES.md](CAPABILITIES.md) lists
+what is supported and the Ruby method for each feature.
 
 ## Install
 
@@ -55,6 +56,8 @@ Blinkstick.open do |stick|         # the first stick; the block form closes it, 
   stick.colour = :cornflowerblue   # set every LED
   stick.colour = "#ff8800"
   stick.colour = [255, 136, 0]
+  stick[0] = :red                  # set one LED, the others stay as they are
+  stick.frame = [:red, "#00ff00"]  # every LED at once, one colour each (a Nano has 2)
   stick.off                        # every LED off
 end
 
@@ -70,9 +73,41 @@ Blinkstick::Colour.names.first(3)           # => ["aliceblue", "antiquewhite", "
 A colour can be a CSS colour name (a string or symbol, any case), hex (`#rgb` or `#rrggbb`,
 with or without the `#`), `"r,g,b"`, or an array of three integers.
 
+`stick[i] = colour` sends one report and leaves the other LEDs alone. The index runs from 0
+up to the model's LED count (a Nano has 2 LEDs, a Square 8), and a bad index raises
+`IndexError`; negative indexes are refused, not counted from the end. `stick.frame = colours`
+needs exactly one colour per LED, so a Nano takes 2 and a Square 8. A wrong count raises
+`ArgumentError`, and something that is not an array raises `TypeError`. Every colour is checked
+before anything is sent.
+
 Failures raise subclasses of `Blinkstick::Error`: `NotFoundError`, `BusyError`,
 `PermissionError`, `UnsupportedModelError`, `ClosedError` and `DisconnectedError`. A bad
 colour raises `Blinkstick::InvalidColourError`, which is an `ArgumentError`.
+
+### Reading a stick
+
+```ruby
+Blinkstick.open do |stick|
+  stick.frame            # => [#<data Blinkstick::Colour red=255, green=0, blue=0>, ...]
+  stick[0]               # => #<data Blinkstick::Colour red=255, green=0, blue=0>
+  stick.mode             # => :ws2812
+  stick.info_block(1)    # => "" or up to 32 bytes, a binary String
+end
+```
+
+- `stick.frame` returns a frozen Array with one `Colour` per LED of the model (2 for a Nano,
+  8 for a Square), and `stick[i]` returns one of them.
+- Reads always ask the stick. Nothing is cached, so you see what the stick shows now, even if
+  another program changed it.
+- `stick.mode` is `:rgb`, `:rgb_inverse`, `:ws2812` or `:ws2812_mirror`. A byte the gem does
+  not know comes back as an Integer.
+- `stick.info_block(1)` and `stick.info_block(2)` return the 32 byte user data blocks with
+  trailing NUL bytes removed, as a frozen binary String. Any other number raises
+  `ArgumentError`. The bytes are whatever any tool last wrote there, so treat them as
+  untrusted input.
+- Nothing in this release writes EEPROM: the mode and info blocks are read only.
+- A read that keeps failing raises `Blinkstick::DisconnectedError`, and a read after `close`
+  raises `ClosedError`, as writes do.
 
 ### Sharing a stick
 

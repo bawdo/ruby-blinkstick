@@ -21,12 +21,12 @@ Features built into the BlinkStick firmware.
 | Serial and firmware version | yes | yes | `info.serial`, `info.version` | 0.1.0 | Read from the device info |
 | Manufacturer and product strings | yes | yes | `info.manufacturer`, `info.product` | 0.1.0 | Read from the device info |
 | Set all LEDs | yes | yes | `stick.colour =`, `stick.off` | 0.1.0 | Set every LED to one colour, or turn them off |
-| Set one LED | no | no |  | not yet | Set a single LED by index, using report 5 |
-| Set every LED at once | no | no |  | not yet | Write a whole frame in one report |
-| Read LED values back | no | no |  | not yet | Read the whole frame or a single LED |
-| Info blocks 1 and 2 | no | no |  | not yet | Read and write the info blocks. 32 bytes each, stored in EEPROM |
-| Set one LED directly (report 5) | no | no |  | not yet | `[5, channel, index, R, G, B]`, RGB order (the frame is GRB). Works in modes 2 and 3. The channel byte is ignored and the index is not range checked |
-| Read device mode (report 4) | no | no |  | not yet | `[4, mode]`. Both read mode 2 |
+| Set one LED | yes | yes | `stick[i] = colour` | 0.2.0 | Set a single LED by index, using report 5 |
+| Set every LED at once | yes | yes | `stick.frame = colours` | 0.2.0 | Write a whole frame in one report |
+| Read LED values back | yes | yes | `stick.frame`, `stick[i]` | 0.2.0 | Read the whole frame or a single LED |
+| Info blocks 1 and 2 | yes | yes | `stick.info_block(n)` | 0.2.0 | 32 bytes each, stored in EEPROM. Read only; writing comes later |
+| Set one LED directly (report 5) | yes | yes | `stick[i] = colour` | 0.2.0 | `[5, channel, index, R, G, B]`, RGB order (the frame is GRB). Works in modes 2 and 3. The channel byte is ignored and the index is not range checked |
+| Read device mode (report 4) | yes | yes | `stick.mode` | 0.2.0 | `[4, mode]`. Both read mode 2 |
 | Set device mode (report 4) | no | no |  | not yet | Stored in EEPROM, blocks about 50 ms, skipped when the mode is unchanged, takes effect without a replug. 2 to 3 to 2 verified on both |
 | Mode 2, WS2812 | no | no |  | not yet | The mode both are in, and the one every LED feature here needs. Probably the factory default |
 | Mode 3, WS2812 mirror | no | no |  | not yet | Changes only report 1, whose colour goes to every LED. Reports 5 and 6 behave as in mode 2 |
