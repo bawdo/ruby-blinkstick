@@ -10,8 +10,6 @@ module Blinkstick
     # Two effects running on one stick at once interleave their frames; that
     # is documented, not prevented. A cancelled effect returns false and
     # leaves the LEDs as they are.
-    #
-    # @api private
     module Effects
       # Seconds between morph steps.
       STEP = 0.02
@@ -127,7 +125,7 @@ module Blinkstick
                    blue: towards(from.blue, target.blue, step, steps))
       end
 
-      # One channel: a + (b - a) * step / steps, truncating toward zero as Go
+      # One channel: a + (b - a) * step / steps, truncating towards zero as Go
       # does (Integer#/ would floor).
       def towards(from, target, step, steps)
         delta = (target - from) * step

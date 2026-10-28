@@ -15,13 +15,12 @@ All notable changes to this project are recorded here. The format follows
 - `Stick#inverse?`, `Stick#inverse=` and `Colour#inverse` flip colours for LEDs wired so 255 is off.
 - `Colour.random` and `Colour.random(vivid: true)`.
 - `Stick#blink`, `Stick#pulse`, `Stick#morph` and `Blinkstick::Cancellation`. Effects return `true` when they finish and `false` when cancelled.
-- `Info#release`, the USB release number the model is worked out from.
-- Reconnect after an unplug: a stick that stops answering is found again by its serial and the last frame is repainted. A stick with an empty or shared serial never reconnects.
+- `Info#release`, the USB release number the model is worked out from. It is the last member and defaults to `nil`, so building an `Info` the 0.2.0 way still works.
+- Reconnect after an unplug: a stick that stops answering is found again by its serial and the last frame is repainted. A stick whose serial is shared with another attached stick never reconnects.
 
 ### Changed
 
-- `Info` gains `release` as its last member. Constructing it the 0.2.0 way, without `release`, still works.
-- `Stick#[]=` checks the index before anything else, so a bad index raises `IndexError` before the stick is touched. The first `[]=` on a fresh `Stick` reads the frame once.
+- `Stick#[]=` checks the index before the colour, so a call with both wrong raises `IndexError`. The first `[]=` on a fresh `Stick` reads the frame once.
 - `DisconnectedError` now means the stick stopped responding and reconnecting to it failed, not just that three attempts failed.
 
 ## [0.2.0] - 2026-10-28

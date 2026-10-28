@@ -5,8 +5,6 @@ module Blinkstick
     # The LED write path of a {Stick}: the brightness limit, inverse, and the
     # last frame written (which a reconnect repaints). All state is guarded by
     # the Stick's lock.
-    #
-    # @api private
     module Lighting
       # @return [Integer] the brightness limit, 0 to 255 (255 by default)
       def brightness_limit

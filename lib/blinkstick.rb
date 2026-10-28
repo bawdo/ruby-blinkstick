@@ -50,8 +50,9 @@ module Blinkstick
   # like File.open, the stick is yielded, closed afterwards even if the
   # block raises, and the block's value is returned.
   #
-  # By name, every stick is opened in turn and its name read (byte for byte);
-  # sticks that cannot be opened or read are skipped, and the others closed.
+  # By name, every stick is opened in turn and its name compared byte for
+  # byte; sticks that cannot be opened or read are skipped, and the ones that
+  # do not match are closed.
   #
   # @param serial [String, nil] for example "BS072777-3.0"
   # @param name [String, nil] a name stored on the stick, see {Stick#name=}

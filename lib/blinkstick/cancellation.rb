@@ -6,7 +6,8 @@ module Blinkstick
   # Every pause in an effect is {#wait}, so {#cancel} wakes it at once. It
   # uses only Mutex and ConditionVariable (no Thread#raise, Thread#kill or
   # Timeout), so it is safe across threads and works under a fiber scheduler.
-  # One token may be shared by several effects.
+  # One token may be shared by several effects. Do not call any of its
+  # methods from a signal trap handler; see {#cancel}.
   #
   #   cancel = Blinkstick::Cancellation.new
   #   Thread.new { sleep 10; cancel.cancel }

@@ -5,8 +5,6 @@ module Blinkstick
     # The parts of a {Stick} that write the stick's EEPROM: its name, its
     # user data blocks and its LED mode. EEPROM wears with every write, so
     # none of these belongs in a loop.
-    #
-    # @api private
     module Eeprom
       # Modes this gem will set, by the byte the stick stores. The BlinkStick
       # Pro modes (0 and 1) are refused.
@@ -74,7 +72,7 @@ module Blinkstick
       # @param mode [Symbol, Integer] :ws2812 (or 2) or :ws2812_mirror (or 3).
       #   The BlinkStick Pro modes (0, 1, :rgb, :rgb_inverse) are refused.
       # @return [Symbol, Integer] mode, as Ruby assignment does
-      # @raise [ArgumentError] before anything is sent, when mode is not one of those four
+      # @raise [ArgumentError] before anything is sent, when mode is not :ws2812, :ws2812_mirror, 2 or 3
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer

@@ -153,10 +153,11 @@ These use Ruby's `Random`, so they are for pretty lights and nothing security re
 ### Writing to the stick's memory
 
 A stick keeps a name, two 32 byte info blocks and its LED mode in EEPROM. **EEPROM wears out
-with writes**, so set these once and never in a loop. Everything in this section writes EEPROM.
-An EEPROM call is retried like any transfer, so on a flaky connection one call can send the
-same write up to six times (three attempts, a reconnect, three more), as go-blinkstick does.
-That is one more reason not to call these in a loop.
+with writes**, so set these once and never in a loop. `name=`, `write_info_block` and `mode=`
+write EEPROM; the other calls here only read. An EEPROM call is retried like any transfer, so
+on a flaky connection one call can send the same write up to six times (three attempts, a
+reconnect, three more), as go-blinkstick does. That is one more reason not to call these in a
+loop.
 
 ```ruby
 Blinkstick.open do |stick|
@@ -181,17 +182,18 @@ Blinkstick.list(names: true)
   matches byte for byte (the others are closed). A stick that cannot be opened or read is
   skipped. No match raises `NotFoundError` whose message says why each stick was skipped, and
   two matches raise `DuplicateNameError` naming their serials. `serial:` and `name:` together,
-  or an empty name, raise `ArgumentError`.
+  or an empty name, raise `ArgumentError`. A match that is a model this gem does not support
+  raises `UnsupportedModelError`.
 - `Blinkstick.list(names: true)` opens every stick briefly to read its name. A stick it cannot
   open (another program has seized it, say) comes back with `busy?` true and an empty name.
   `Blinkstick.list` with no argument opens nothing.
 - `write_info_block(number, bytes)` takes block 1 or 2 and a String of at most 32 bytes, written
-  byte for byte whatever its encoding. Trailing NUL bytes are not kept, because reads strip
-  them. A bad number or too many bytes raises `ArgumentError`, and a non String raises
+  byte for byte whatever its encoding. Trailing NUL bytes read back as nothing, because reads
+  strip them. A bad number or too many bytes raises `ArgumentError`, and a non String raises
   `TypeError`.
-- `stick.mode = ` takes `:ws2812` (2) or `:ws2812_mirror` (3). In mirror mode `colour=` still
-  lights every LED, and reports 5 and 6 behave as in mode 2. The write takes about 50 ms and
-  needs no replug. Modes 0 and 1 are for the BlinkStick Pro: they raise `ArgumentError`, as
+- `stick.mode =` takes `:ws2812` (or 2) or `:ws2812_mirror` (or 3). In mirror mode `colour=`
+  still lights every LED, and reports 5 and 6 behave as in mode 2. The write takes about 50 ms
+  and needs no replug. Modes 0 and 1 are for the BlinkStick Pro: they raise `ArgumentError`, as
   they can leave a Nano dark until it is replugged.
 - Names and info block bytes are whatever any tool last wrote, so they may not be valid UTF-8
   and may hold control characters. They come back as they are. Treat them as untrusted input,
@@ -232,8 +234,8 @@ cancel.cancelled?    # => true
 - Each write takes the stick's lock on its own, so other calls can run in the middle of an
   effect. Two effects on one stick at the same time interleave their frames, and the gem does
   not stop you.
-- Do not call `cancel.cancel` from a `trap` handler: it takes a Mutex, and Ruby refuses that
-  inside a trap. Set a flag in the handler and cancel from a normal thread instead.
+- Do not call a `Cancellation`'s methods from a `trap` handler: they take a Mutex, and Ruby
+  refuses that inside a trap. Set a flag in the handler and cancel from a normal thread instead.
 
 ### Reconnecting
 
@@ -251,9 +253,9 @@ call just works, with the LEDs as you left them.
 - It tries once per call. If the stick is missing, cannot be opened or the repaint fails, the
   call raises `DisconnectedError`, and the next call tries again. `close` on a disconnected
   stick succeeds.
-- A `Stick` never reconnects onto a different stick. If its serial is empty or more than one
-  attached stick has it, it raises `DisconnectedError` rather than guess. (Linux reports an
-  empty serial for a stick that has no `HID_UNIQ`.)
+- A `Stick` never reconnects onto a different stick. If more than one attached stick has its
+  serial, it raises `DisconnectedError` rather than guess. (A stick with an empty serial, which
+  Linux reports when there is no `HID_UNIQ`, is an unknown model and cannot be opened at all.)
 - `BusyError`, `PermissionError` and `ClosedError` are raised as they are, without reconnecting.
 
 ### Sharing a stick

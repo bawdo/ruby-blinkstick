@@ -142,8 +142,8 @@ module Blinkstick
       nil
     end
 
-    # Releases the stick. Calling it again does nothing, and neither does
-    # calling it on a stick that was unplugged and not found again.
+    # Releases the stick. Calling it again does nothing, and it succeeds on a
+    # stick that was unplugged and not found again.
     #
     # @return [void]
     def close

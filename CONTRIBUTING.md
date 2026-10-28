@@ -47,7 +47,7 @@ that decide a release: if the shared open or the shared read fails on macOS,
 the release stops. Attach a Nano and a Square for the full run; without both,
 the pair test skips with a message.
 
-The newer checks cover, for every attached stick, the brightness limit (a
+The 0.3.0 checks cover, for every attached stick, the brightness limit (a
 limited write reads back scaled), inverse (the frame reads back as written
 while a second, plain handle on the same serial reads the flipped bytes), morph
 ending on its colour, blink and pulse ending off, an effect given an already
@@ -78,16 +78,19 @@ matches no stick or more than one (it refuses an ambiguous serial rather than
 picking the first), and when the stick is not in mode 2 or 3 (`mode=` cannot
 restore modes 0 or 1).
 
-It saves the stick's name, both info blocks and mode. It then writes the name
-`eeprom-check`, info block 2 `eeprom-check-2`, and the mode it is not in
-followed by its own, so two real mode writes happen, reading each back. It
-restores the saved blocks and mode last, byte for byte (including a name that is
-not valid UTF-8), even if a step fails, and prints a line for every write, read
-and restore. It exits 1 on any mismatch or failed restore.
+It saves both info blocks (block 1 holds the name) and the mode. It then writes
+the name `eeprom-check`, info block 2 `eeprom-check-2`, and the mode it is not
+in followed by its own, so two real mode writes happen, reading each back. It
+restores the saved blocks and mode last, byte for byte (including a name that
+is not valid UTF-8), even if a step fails, and prints a line for every write,
+read and restore. It exits 1 on any mismatch or failed restore, or when the gem
+raises an error (the stick is busy, say).
 
 Ctrl-C before the first write stops the script as usual. Ctrl-C during the
-restore is noted and the restore still runs to the end, then the script reports
-it and exits 1. The script is not part of the gem.
+writes stops them, the restore still runs, and the script then ends as
+interrupted, with no summary line. Ctrl-C during the restore is noted and the
+restore still runs to the end, then the script reports it and exits 1. The
+script is not part of the gem.
 
 ### Manual check before a release
 

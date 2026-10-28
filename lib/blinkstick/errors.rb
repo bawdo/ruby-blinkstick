@@ -4,7 +4,7 @@ module Blinkstick
   # Base class for every error this gem raises on purpose.
   class Error < StandardError; end
 
-  # Raised when no BlinkStick matches the requested serial or index.
+  # Raised when no BlinkStick is attached, or none matches the requested serial or name.
   class NotFoundError < Error; end
 
   # Raised when another program has seized the stick (macOS only).
