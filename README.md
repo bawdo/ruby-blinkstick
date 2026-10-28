@@ -65,7 +65,8 @@ came from this repository's workflow, with the [GitHub CLI](https://cli.github.c
 
 ```sh
 gem fetch ruby-blinkstick -v 0.0.2
-gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick
+gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick \
+  --signer-workflow bawdo/ruby-blinkstick/.github/workflows/release.yml
 ```
 
 Swap in the version you are checking. [SECURITY.md](SECURITY.md) has the details.

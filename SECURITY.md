@@ -36,8 +36,13 @@ was built by this repository's release workflow:
 
 ```sh
 gem fetch ruby-blinkstick -v 0.0.2
-gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick
+gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick \
+  --signer-workflow bawdo/ruby-blinkstick/.github/workflows/release.yml
 ```
+
+`--repo` alone accepts an attestation from any workflow in this repository.
+`--signer-workflow` narrows that to the release workflow, which is the only
+one that should ever attest a gem.
 
 The trusted publisher on rubygems.org must keep naming the `rubygems`
 environment. The job that makes the attestation can request an OIDC token but
