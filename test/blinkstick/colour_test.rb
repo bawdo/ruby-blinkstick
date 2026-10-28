@@ -90,6 +90,13 @@ class ColourTest < Minitest::Test
     assert_equal ORANGE.hash, other.hash
   end
 
+  def test_inverse
+    colour = Colour.new(red: 0, green: 128, blue: 255)
+
+    assert_equal Colour.new(red: 255, green: 127, blue: 0), colour.inverse
+    assert_equal colour, colour.inverse.inverse
+  end
+
   def test_error_hierarchy
     %i[NotFoundError BusyError PermissionError UnsupportedModelError ClosedError DisconnectedError].each do |name|
       assert_operator Blinkstick.const_get(name), :<, Blinkstick::Error

@@ -23,6 +23,12 @@ class ModelTest < Minitest::Test
     end
   end
 
+  def test_info_from_keeps_release
+    info = Info.from(serial: "BS072777-3.0", manufacturer: "m", product: "p", release: 0x0202)
+
+    assert_equal 0x0202, info.release
+  end
+
   def test_info_copies_strings
     info = Info.from(serial: "BS072777-3.0", manufacturer: "Agile Innovative Ltd",
                      product: "BlinkStick Nano", release: 0x0202)

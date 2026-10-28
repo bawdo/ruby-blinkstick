@@ -17,6 +17,13 @@ class OpenTest < Minitest::Test
     assert_equal ["Agile Innovative Ltd"], infos.map(&:manufacturer).uniq
   end
 
+  def test_list_and_open_carry_release
+    install_backend(FakeBackend.new(FakeBackend.nano))
+
+    assert_equal [0x0202], Blinkstick.list.map(&:release)
+    Blinkstick.open { |stick| assert_equal 0x0202, stick.info.release }
+  end
+
   def test_open_first
     backend = install_backend(FakeBackend.new(FakeBackend.nano, FakeBackend.square))
 

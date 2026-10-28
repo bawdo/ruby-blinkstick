@@ -33,7 +33,7 @@ module Blinkstick
   private_constant :MODELS
 
   # Identifies an attached BlinkStick. It holds no OS path or handle.
-  Info = Data.define(:serial, :version, :manufacturer, :product, :model) do
+  Info = Data.define(:serial, :version, :manufacturer, :product, :release, :model) do
     # @param serial [String] for example "BS072777-3.0"
     # @param manufacturer [String]
     # @param product [String]
@@ -43,7 +43,7 @@ module Blinkstick
       _, _, version = serial.partition("-")
       major, = version.split(".", 2)
       new(serial: serial, version: version, manufacturer: manufacturer, product: product,
-          model: MODELS.fetch([major, release], Model::UNKNOWN))
+          release: release, model: MODELS.fetch([major, release], Model::UNKNOWN))
     end
   end
 end

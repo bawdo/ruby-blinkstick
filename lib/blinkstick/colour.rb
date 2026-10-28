@@ -43,6 +43,27 @@ module Blinkstick
       NAMES
     end
 
+    # Picks a random colour.
+    #
+    # Without +vivid+ each channel is uniform from 0 to 255, so many results are
+    # muted. With +vivid+ the colour is one of the 1530 fully saturated hues:
+    # one channel is 255 and another is 0. Not suitable for anything security
+    # related.
+    #
+    # @param vivid [Boolean] pick only fully saturated hues
+    # @param random [#rand] the generator, anything responding to +rand(n)+
+    # @return [Colour]
+    def self.random(vivid: false, random: Random)
+      return hue(random.rand(Colour::HUES)) if vivid
+
+      new(red: random.rand(256), green: random.rand(256), blue: random.rand(256))
+    end
+
+    # @return [Colour] the colour with each channel replaced by 255 minus its value
+    def inverse
+      with(red: 255 - red, green: 255 - green, blue: 255 - blue)
+    end
+
     # @return [String] the colour as lower case "#rrggbb"
     def hex
       format("#%<r>02x%<g>02x%<b>02x", r: red, g: green, b: blue)
@@ -52,6 +73,20 @@ module Blinkstick
 
     class << self
       private
+
+      # Port of go-blinkstick's hue: step +step+ (0...HUES) of the wheel,
+      # running red, yellow, green, cyan, blue, magenta and back towards red.
+      def hue(step)
+        offset = step % 255
+        case step / 255
+        when 0 then new(red: 255, green: offset, blue: 0)
+        when 1 then new(red: 255 - offset, green: 255, blue: 0)
+        when 2 then new(red: 0, green: 255, blue: offset)
+        when 3 then new(red: 0, green: 255 - offset, blue: 255)
+        when 4 then new(red: offset, green: 0, blue: 255)
+        else new(red: 255, green: 0, blue: 255 - offset)
+        end
+      end
 
       def lookup(name)
         COLOUR_NAMES[name]
@@ -96,6 +131,9 @@ module Blinkstick
       end
     end
   end
+
+  # Number of fully saturated hues: six segments of 255 steps.
+  Colour::HUES = 6 * 255
 
   # Colour with every channel off.
   Colour::OFF = Colour.new(red: 0, green: 0, blue: 0)
