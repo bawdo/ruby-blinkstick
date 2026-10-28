@@ -46,6 +46,42 @@ module Blinkstick
       write(Report.frame([Colour.parse(colour)] * info.model.leds))
     end
 
+    # Sets one LED, leaving the others as they are.
+    #
+    # @param index [Integer] LED index, 0 up to the model's LED count
+    # @param colour [Colour, String, Symbol, Array<Integer>] anything {Colour.parse} takes
+    # @return [Colour, String, Symbol, Array<Integer>] colour, as Ruby assignment does
+    # @raise [IndexError] when index is not an Integer within the model's LEDs
+    # @raise [InvalidColourError] when colour is not a colour (both checked before anything is sent)
+    # @raise [ClosedError] after {#close}
+    # @raise [DisconnectedError] when the stick stops responding
+    def []=(index, colour)
+      parsed = Colour.parse(colour)
+      check_index(index)
+      write(Report.led(index, parsed))
+      colour
+    end
+
+    # Sets every LED at once, one colour each, in a single report.
+    #
+    # @param colours [Array<Colour, String, Symbol, Array<Integer>>] exactly one per LED of the model
+    # @raise [TypeError] when colours is not array like
+    # @raise [ArgumentError] when colours has the wrong length
+    # @raise [InvalidColourError] when any entry is not a colour
+    # @raise [ClosedError] after {#close}
+    # @raise [DisconnectedError] when the stick stops responding
+    def frame=(colours)
+      list = Array.try_convert(colours)
+      raise TypeError, "frame must be an Array of colours, got #{colours.class}" if list.nil?
+
+      model = info.model
+      unless list.size == model.leds
+        raise ArgumentError, "a #{model.name} has #{model.leds} LEDs, got #{list.size} colours"
+      end
+
+      write(Report.frame(list.map { |colour| Colour.parse(colour) }))
+    end
+
     # Turns every LED off.
     #
     # @return [void]
@@ -76,6 +112,14 @@ module Blinkstick
     end
 
     private
+
+    # @raise [IndexError] unless index is an Integer from 0 to the model's LEDs
+    def check_index(index)
+      model = info.model
+      return if index.is_a?(Integer) && index >= 0 && index < model.leds
+
+      raise IndexError, "LED #{index.inspect} is out of range: a #{model.name} has #{model.leds} LEDs"
+    end
 
     # Holds the lock across every attempt, so reports from other threads
     # cannot land in between.

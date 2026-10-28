@@ -7,7 +7,7 @@ class FakeBackend
 
   # A simulated open device.
   class Handle
-    attr_reader :device, :writes, :stream, :attempts
+    attr_reader :device, :writes, :stream, :attempts, :leds, :writes_by_id
 
     def initialize(device, fail_writes:, gone:)
       @device = device
@@ -16,6 +16,8 @@ class FakeBackend
       @writes = []
       @stream = []
       @attempts = 0
+      @leds = Array.new(8, Blinkstick::Colour::OFF)
+      @writes_by_id = Hash.new(0)
       @closed = false
     end
 
@@ -34,6 +36,7 @@ class FakeBackend
         Thread.pass
       end
       @writes << report
+      apply(report)
     end
 
     def close
@@ -42,6 +45,22 @@ class FakeBackend
 
     def closed?
       @closed
+    end
+
+    private
+
+    # Mirrors the LED state a recorded report leaves on the stick.
+    def apply(report)
+      id = report.getbyte(0)
+      @writes_by_id[id] += 1
+      case id
+      when Blinkstick::Report::FRAME_ID then @leds = Blinkstick::Report.decode_frame(report, 8)
+      when Blinkstick::Report::LED_ID then @leds = @leds.dup.tap { |leds| leds[report.getbyte(2)] = rgb(report) }
+      end
+    end
+
+    def rgb(report)
+      Blinkstick::Colour.new(red: report.getbyte(3), green: report.getbyte(4), blue: report.getbyte(5))
     end
   end
 
