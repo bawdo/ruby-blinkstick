@@ -43,7 +43,7 @@ module Blinkstick
           raise ClosedError, "#{name} is closed" if @closed
 
           @io.ioctl(Hidraw.set_feature_request(report.bytesize), report.dup)
-        rescue Errno::ENODEV, Errno::ESHUTDOWN => e
+        rescue Errno::ENODEV, Errno::ENOENT, Errno::ESHUTDOWN => e
           raise DisconnectedError, "#{name} was unplugged (#{e.class})"
         rescue Errno::EACCES, Errno::EPERM => e
           raise PermissionError, "#{name}: #{e.message}. #{UDEV_HINT}"

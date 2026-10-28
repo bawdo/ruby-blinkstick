@@ -10,6 +10,15 @@ class HidrawTest < Minitest::Test
   REQUEST = 0xC01A4806
   REPORT = ("\x06\x00".b + ("\x01".b * 24)).freeze
 
+  WRITE_ERRORS = {
+    Errno::ENODEV => Blinkstick::DisconnectedError,
+    Errno::ENOENT => Blinkstick::DisconnectedError,
+    Errno::ESHUTDOWN => Blinkstick::DisconnectedError,
+    Errno::EACCES => Blinkstick::PermissionError,
+    Errno::EPERM => Blinkstick::PermissionError,
+    Errno::EIO => Blinkstick::Backend::TransferFailed
+  }.freeze
+
   # Records what it was asked to do, or fails the way the kernel would.
   class FakeIO
     attr_reader :calls, :closes
@@ -95,11 +104,7 @@ class HidrawTest < Minitest::Test
   end
 
   def test_write_errors_map
-    {
-      Errno::ENODEV => Blinkstick::DisconnectedError,
-      Errno::ESHUTDOWN => Blinkstick::DisconnectedError,
-      Errno::EIO => Blinkstick::Backend::TransferFailed
-    }.each do |errno, expected|
+    WRITE_ERRORS.each do |errno, expected|
       handle = Hidraw::Handle.new(FakeIO.new(error: errno))
       assert_raises(expected, errno.name) { handle.write_feature(REPORT) }
     end
