@@ -13,11 +13,11 @@ of BlinkStick.
 ## Status
 
 This gem finds a BlinkStick Nano or Square, opens it by serial or by name, sets every LED to a
-colour, sets one LED or the whole frame, reads LEDs, the mode and the info blocks back, and turns
-them off, on macOS and Linux. It can also name a stick, write the info blocks, set the mode,
-limit the brightness, invert the output, pick random colours, run cancellable blink, pulse and
-morph effects, and reconnect after an unplug. [CAPABILITIES.md](CAPABILITIES.md) lists what is supported and the
-Ruby method for each feature.
+colour, sets one LED or the whole frame, reads LEDs, the mode and the info blocks back, and
+turns them off, on macOS and Linux. It can also name a stick, write the info blocks, set the
+mode, limit the brightness, invert the output, pick random colours, run cancellable blink,
+pulse and morph effects, and reconnect after an unplug. [CAPABILITIES.md](CAPABILITIES.md)
+lists what is supported and the Ruby method for each feature.
 
 ## Install
 
@@ -50,8 +50,8 @@ require "blinkstick"
 
 Blinkstick.list
 # => [#<data Blinkstick::Info serial="BS072777-3.0", version="3.0",
-#      manufacturer="Agile Innovative Ltd", product="BlinkStick", release=514,
-#      model=#<data Blinkstick::Model name="Nano", leds=2>>]
+#      manufacturer="Agile Innovative Ltd", product="BlinkStick",
+#      model=#<data Blinkstick::Model name="Nano", leds=2>, release=514>]
 
 Blinkstick.open do |stick|         # the first stick; the block form closes it, like File.open
   stick.colour = :cornflowerblue   # set every LED
@@ -91,8 +91,8 @@ before anything is sent.
 
 Failures raise subclasses of `Blinkstick::Error`: `NotFoundError`, `BusyError`,
 `PermissionError`, `UnsupportedModelError`, `ClosedError`, `DisconnectedError` and
-`DuplicateNameError`. A bad
-colour raises `Blinkstick::InvalidColourError`, which is an `ArgumentError`.
+`DuplicateNameError`. A bad colour raises `Blinkstick::InvalidColourError`, which is an
+`ArgumentError`.
 
 ### Reading a stick
 
@@ -154,6 +154,9 @@ These use Ruby's `Random`, so they are for pretty lights and nothing security re
 
 A stick keeps a name, two 32 byte info blocks and its LED mode in EEPROM. **EEPROM wears out
 with writes**, so set these once and never in a loop. Everything in this section writes EEPROM.
+An EEPROM call is retried like any transfer, so on a flaky connection one call can send the
+same write up to six times (three attempts, a reconnect, three more), as go-blinkstick does.
+That is one more reason not to call these in a loop.
 
 ```ruby
 Blinkstick.open do |stick|

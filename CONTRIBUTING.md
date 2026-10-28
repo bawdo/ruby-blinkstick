@@ -73,15 +73,21 @@ ruby -Ilib scripts/eeprom-check.rb SERIAL --yes-write-eeprom
 ```
 
 It exits 2 with a usage message unless it gets both the serial and the
-`--yes-write-eeprom` flag, and also refuses a stick that is not in mode 2 or 3
-(`mode=` cannot restore modes 0 or 1). It saves the stick's name, both info
-blocks and mode, then writes the name `eeprom-check`, info block 2
-`eeprom-check-2` and the mode (the one it is not in, then its own), reading each back. It restores the
-saved name, blocks and mode even if a step fails, and prints a line for every
-write, read and restore. It exits 1 on any mismatch or failed restore. Both
-blocks are restored byte for byte, including a name that is not valid UTF-8.
-The mode is written to whichever of 2 and 3 is not current first, then back, so
-two real writes happen. The script is not part of the gem.
+`--yes-write-eeprom` flag. It also exits 2, writing nothing, when the serial
+matches no stick or more than one (it refuses an ambiguous serial rather than
+picking the first), and when the stick is not in mode 2 or 3 (`mode=` cannot
+restore modes 0 or 1).
+
+It saves the stick's name, both info blocks and mode. It then writes the name
+`eeprom-check`, info block 2 `eeprom-check-2`, and the mode it is not in
+followed by its own, so two real mode writes happen, reading each back. It
+restores the saved blocks and mode last, byte for byte (including a name that is
+not valid UTF-8), even if a step fails, and prints a line for every write, read
+and restore. It exits 1 on any mismatch or failed restore.
+
+Ctrl-C before the first write stops the script as usual. Ctrl-C during the
+restore is noted and the restore still runs to the end, then the script reports
+it and exits 1. The script is not part of the gem.
 
 ### Manual check before a release
 

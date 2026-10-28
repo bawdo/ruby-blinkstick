@@ -20,6 +20,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `Info` gains `release` as its last member. Constructing it the 0.2.0 way, without `release`, still works.
 - `Stick#[]=` checks the index before anything else, so a bad index raises `IndexError` before the stick is touched. The first `[]=` on a fresh `Stick` reads the frame once.
 - `DisconnectedError` now means the stick stopped responding and reconnecting to it failed, not just that three attempts failed.
 

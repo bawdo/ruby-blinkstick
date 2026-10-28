@@ -9,7 +9,8 @@
 #   ruby -Ilib scripts/eeprom-check.rb SERIAL --yes-write-eeprom
 #
 # Exit status: 0 all checks passed and everything restored, 1 a mismatch or a
-# failed restore, 2 refused (bad arguments, or a stick not in mode 2 or 3).
+# failed restore, 2 refused (bad arguments, a serial that matches no stick or
+# several, or a stick not in mode 2 or 3).
 
 FLAG = "--yes-write-eeprom"
 USAGE = "usage: ruby -Ilib scripts/eeprom-check.rb SERIAL #{FLAG}".freeze
@@ -26,6 +27,9 @@ end
 
 SERIAL = serial_from(ARGV)
 
+# Autoloads resolve through $LOAD_PATH, so put this tree's lib first, or an
+# installed older gem's backend could load.
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require_relative "../lib/blinkstick"
 
 # Writes test values to one stick, reads each back and restores the originals.
@@ -89,7 +93,19 @@ class EepromCheck
     end
   end
 
+  # Runs every step even on Ctrl-C: INT is noted, not acted on, until done.
   def restore
+    interrupted = false
+    previous = trap("INT") { interrupted = true }
+    restore_all
+    return unless interrupted
+
+    fail_with "restore: interrupted (Ctrl-C), but every restore step still ran"
+  ensure
+    trap("INT", previous) if previous
+  end
+
+  def restore_all
     attempt("block 1") { @stick.write_info_block(1, @block1) }
     attempt("block 2") { @stick.write_info_block(2, @block2) }
     attempt("mode") { @stick.mode = @mode }
@@ -137,8 +153,22 @@ class EepromCheck
   end
 end
 
+# One stick only: open(serial:) takes the first of several that share a serial.
+def require_unique(serial)
+  count = Blinkstick.list.count { |info| info.serial == serial }
+  return if count == 1
+
+  if count.zero?
+    warn "refused: no stick with serial #{serial.inspect} found"
+  else
+    warn "refused: #{count} sticks share serial #{serial.inspect}, so it is ambiguous"
+  end
+  exit 2
+end
+
 stick = nil
 begin
+  require_unique(SERIAL)
   stick = Blinkstick.open(serial: SERIAL)
   exit EepromCheck.new(stick).run
 rescue Blinkstick::Error => e

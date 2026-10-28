@@ -25,7 +25,12 @@ module Blinkstick
 
     # Cancels the token and wakes every waiter. Safe to call again.
     #
+    # Do not call this from a signal trap handler: Mutex#synchronize raises
+    # ThreadError there. Set a flag in the trap and cancel from a thread that
+    # watches it.
+    #
     # @return [nil]
+    # @raise [ThreadError] when called from a signal trap handler
     def cancel
       @mutex.synchronize do
         @cancelled = true
