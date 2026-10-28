@@ -35,11 +35,23 @@ is theirs.
 ## Changes
 
 - Keep a change to one concern, with tests for new behaviour.
-- Update `CHANGELOG.md` under a heading for the next version, and README or
+- Add an entry under `## [Unreleased]` in `CHANGELOG.md`, and update README or
   CAPABILITIES.md if behaviour changes.
 - Write commit subjects and pull request titles in the past tense, 60
   characters or fewer, for example "Added Strip support". Pull requests are
   squash merged, so the title becomes the commit on `main`.
+
+## Releasing
+
+1. In a pull request, set `Blinkstick::VERSION` in `lib/blinkstick/version.rb`
+   and rename `## [Unreleased]` in `CHANGELOG.md` to `## [x.y.z] - YYYY-MM-DD`,
+   with a fresh, empty `## [Unreleased]` above it.
+2. Once it merges, `git switch main && git pull --ff-only`.
+3. `git tag -s vx.y.z -m "Released x.y.z"`, then `git push origin vx.y.z`.
+
+The release workflow refuses a tag that does not match `Blinkstick::VERSION` or
+has no CHANGELOG section, and builds, publishes and creates the GitHub release
+itself.
 
 ## Licence
 

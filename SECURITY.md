@@ -23,7 +23,7 @@ Examples are a write to EEPROM from a call that is documented as read only,
 or a problem in how releases are built and published.
 
 Out of scope: BlinkStick firmware and hardware, and the HID libraries the gem
-uses. Report those upstream.
+will depend on. Report those upstream.
 
 Releases are published from GitHub Actions through rubygems.org trusted
 publishing from 0.0.1 onward. A version that rubygems.org does not attribute
