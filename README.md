@@ -57,7 +57,7 @@ Blinkstick.open do |stick|         # the first stick; the block form closes it, 
   stick.colour = "#ff8800"
   stick.colour = [255, 136, 0]
   stick[0] = :red                  # set one LED, the others stay as they are
-  stick.frame = [:red, "#00ff00"]  # every LED at once, one colour each (a Nano has 2)
+  stick.frame = Array.new(stick.info.model.leds) { |i| i.even? ? :red : :green }  # every LED at once, one colour each
   stick.off                        # every LED off
 end
 
@@ -74,7 +74,7 @@ A colour can be a CSS colour name (a string or symbol, any case), hex (`#rgb` or
 with or without the `#`), `"r,g,b"`, or an array of three integers.
 
 `stick[i] = colour` sends one report and leaves the other LEDs alone. The index runs from 0
-up to the model's LED count (a Nano has 2 LEDs, a Square 8), and a bad index raises
+to one less than the model's LED count (a Nano takes 0 or 1, a Square 0 to 7), and a bad index raises
 `IndexError`; negative indexes are refused, not counted from the end. `stick.frame = colours`
 needs exactly one colour per LED, so a Nano takes 2 and a Square 8. A wrong count raises
 `ArgumentError`, and something that is not an array raises `TypeError`. Every colour is checked

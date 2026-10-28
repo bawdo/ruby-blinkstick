@@ -42,6 +42,8 @@ module Blinkstick
     # @param colour [Colour, String, Symbol, Array<Integer>] anything {Colour.parse} takes
     # @raise [InvalidColourError] before anything is sent, when colour is not a colour
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def colour=(colour)
       write(Report.frame([Colour.parse(colour)] * info.model.leds))
@@ -49,12 +51,14 @@ module Blinkstick
 
     # Sets one LED, leaving the others as they are.
     #
-    # @param index [Integer] LED index, 0 up to the model's LED count
+    # @param index [Integer] LED index, 0 to one less than the model's LED count (a Nano takes 0 or 1, a Square 0 to 7)
     # @param colour [Colour, String, Symbol, Array<Integer>] anything {Colour.parse} takes
     # @return [Colour, String, Symbol, Array<Integer>] colour, as Ruby assignment does
     # @raise [IndexError] when index is not an Integer within the model's LEDs
     # @raise [InvalidColourError] when colour is not a colour (both checked before anything is sent)
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def []=(index, colour)
       parsed = Colour.parse(colour)
@@ -70,6 +74,8 @@ module Blinkstick
     # @raise [ArgumentError] when colours has the wrong length
     # @raise [InvalidColourError] when any entry is not a colour
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def frame=(colours)
       list = Array.try_convert(colours)
@@ -88,6 +94,8 @@ module Blinkstick
     #
     # @return [Array<Colour>] frozen, one per LED of the model
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def frame
       Report.decode_frame(read(Report::FRAME_ID, Report::FRAME_SIZE), info.model.leds)
@@ -95,10 +103,12 @@ module Blinkstick
 
     # Reads one LED back from the stick, by reading the whole frame.
     #
-    # @param index [Integer] LED index, 0 up to the model's LED count
+    # @param index [Integer] LED index, 0 to one less than the model's LED count (a Nano takes 0 or 1, a Square 0 to 7)
     # @return [Colour]
     # @raise [IndexError] before anything is sent, when index is not an Integer within the model's LEDs
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def [](index)
       check_index(index)
@@ -110,6 +120,8 @@ module Blinkstick
     # @return [Symbol, Integer] :rgb, :rgb_inverse, :ws2812 or :ws2812_mirror,
     #   or the raw byte for a mode the gem does not know
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def mode
       Report.decode_mode(read(Report::MODE_ID, Report::MODE_SIZE))
@@ -121,6 +133,8 @@ module Blinkstick
     # @return [String] frozen binary String, up to 32 bytes, trailing NULs removed
     # @raise [ArgumentError] before anything is sent, when number is not 1 or 2
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def info_block(number)
       Report.decode_info_block(read(Report.info_block_id(number), Report::INFO_BLOCK_SIZE))
@@ -130,6 +144,8 @@ module Blinkstick
     #
     # @return [void]
     # @raise [ClosedError] after {#close}
+    # @raise [BusyError] when another program holds the stick mid-transfer
+    # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def off
       self.colour = Colour::OFF
