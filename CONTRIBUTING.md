@@ -52,7 +52,14 @@ is theirs.
 Check the new section has entries before tagging: the release workflow refuses
 a tag that does not match `Blinkstick::VERSION`, or whose CHANGELOG section is
 missing or empty, and tags cannot be moved or reused once pushed. Everything
-else (build, publish, GitHub release) the workflow does itself.
+else (build, attest, publish, GitHub release) the workflow does itself, and it
+stops before publishing if the attestation does not verify.
+
+If a release run fails, use "Re-run failed jobs" within a day, while the
+run's artifacts are kept. Publish skips the push when rubygems.org already has
+the version, and goes on to check the attestation and create the GitHub
+release. After a day, "Re-run all jobs" rebuilds instead, and publish refuses
+to go on if the rebuilt gem differs from the one on rubygems.org.
 
 ## Licence
 

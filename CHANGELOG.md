@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The documented `gh attestation verify` command checks the release workflow, not just the repository.
+- The release workflow also checks that the attestation names the tagged commit, and a re-run refuses to go on if rubygems.org has a different gem for the version.
+
 ## [0.0.2] - 2026-10-28
 
 ### Added
