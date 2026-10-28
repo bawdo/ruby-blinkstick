@@ -11,6 +11,13 @@ class ReleaseWorkflowTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
   WORKFLOWS = File.join(ROOT, ".github", "workflows")
   PINNED_USES = /uses: \S+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/
+  VERIFY_CONSTRAINTS = [
+    '--repo "$GITHUB_REPOSITORY"',
+    '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"',
+    '--source-ref "$GITHUB_REF"',
+    '--source-digest "$GITHUB_SHA"',
+    "--deny-self-hosted-runners"
+  ].freeze
   INSTALLS = /\b(gem (install|exec|update)|bundle (install|exec|update)|bundler)\b/
 
   def test_jobs_run_build_attest_publish_release
@@ -24,6 +31,14 @@ class ReleaseWorkflowTest < Minitest::Test
                    "actions" => %w[actions/download-artifact actions/attest actions/upload-artifact],
                    "permissions" => { "contents" => "read", "id-token" => "write", "attestations" => "write" } },
                  shape(jobs.fetch("attest")))
+  end
+
+  # Dropping any of these would let a bundle from another repository,
+  # workflow, tag, commit or runner through to publish.
+  def test_attest_verifies_every_identity_constraint
+    verify = jobs.fetch("attest")["steps"].find { |step| step["name"] == "Verify the attestation" }
+
+    assert_equal(VERIFY_CONSTRAINTS, VERIFY_CONSTRAINTS.select { |flag| verify["run"].include?(flag) })
   end
 
   def test_publish_job_runs_no_repository_code
