@@ -30,4 +30,56 @@ class ReportTest < Minitest::Test
     assert_equal 26, frame.bytesize
     assert_predicate frame, :frozen?
   end
+
+  def test_led_is_rgb_order
+    report = Report.led(3, Colour.new(red: 1, green: 2, blue: 3))
+
+    assert_equal [5, 0, 3, 1, 2, 3], report.bytes
+    assert_equal Encoding::ASCII_8BIT, report.encoding
+    assert_predicate report, :frozen?
+  end
+
+  def test_led_rejects_bad_index
+    [-1, 256, 1.0].each do |index|
+      assert_raises(ArgumentError) { Report.led(index, Colour::OFF) }
+    end
+  end
+
+  def test_decode_frame_round_trip
+    colours = (1..8).map { |i| Colour.new(red: i, green: i + 10, blue: i + 20) }
+    bytes = Report.frame(colours).bytes
+
+    decoded = Report.decode_frame(bytes, 8)
+
+    assert_equal colours, decoded
+    assert_predicate decoded, :frozen?
+    assert_equal colours.first(2), Report.decode_frame(bytes, 2)
+  end
+
+  def test_decode_mode
+    modes = [0, 1, 2, 3, 9].map { |byte| Report.decode_mode([4, byte]) }
+
+    assert_equal [:rgb, :rgb_inverse, :ws2812, :ws2812_mirror, 9], modes
+  end
+
+  def test_info_block_ids
+    assert_equal 2, Report.info_block_id(1)
+    assert_equal 3, Report.info_block_id(2)
+    [0, 3, "1"].each do |n|
+      assert_raises(ArgumentError) { Report.info_block_id(n) }
+    end
+  end
+
+  def test_decode_info_block
+    text = Report.decode_info_block([2] + "hi".bytes + ([0] * 30))
+
+    assert_equal "hi", text
+    assert_equal Encoding::ASCII_8BIT, text.encoding
+    assert_predicate text, :frozen?
+  end
+
+  def test_decode_info_block_empty_and_embedded_nul
+    assert_equal "", Report.decode_info_block([2] + ([0] * 32))
+    assert_equal "a\0b", Report.decode_info_block([2, 0x61, 0, 0x62] + ([0] * 29))
+  end
 end
