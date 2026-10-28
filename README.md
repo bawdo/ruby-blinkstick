@@ -12,9 +12,9 @@ of BlinkStick.
 
 ## Status
 
-`0.0.1` reserves the gem name and does nothing else. The implementation will port
-[go-blinkstick](https://github.com/bawdo/go-blinkstick). See [CAPABILITIES.md](CAPABILITIES.md)
-for the features it will cover.
+This gem is a placeholder that reserves the name and does nothing else yet. The implementation
+will port [go-blinkstick](https://github.com/bawdo/go-blinkstick). See
+[CAPABILITIES.md](CAPABILITIES.md) for the features it will cover.
 
 ## Install
 

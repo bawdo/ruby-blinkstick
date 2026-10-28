@@ -1,6 +1,6 @@
 # Capabilities
 
-0.0.1 is a placeholder and supports nothing. This table is the checklist for the implementation.
+The gem is a placeholder and supports nothing yet. This table is the checklist for the implementation.
 
 What the BlinkStick Nano and Square can do, and what this gem supports so far. Back to the
 [README](README.md).
