@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        ruby: ["3.4", "4.0"]
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      # The same checks as a local `bundle exec rake` and the release build:
+      # RuboCop, then the tests.
+      - run: bundle exec rake
+
+  # Builds the gem, installs it into a scratch GEM_HOME and requires it
+  # from outside the repository, catching a gem that builds and passes its
+  # tests but will not install or load.
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "4.0"
+          # No bundler-cache: the smoke install needs nothing from the
+          # Gemfile, and must not load the repository through Bundler.
+      - run: sh scripts/smoke-gem.sh
+
+  # Runs the tests once more with coverage, audits the lockfile and uploads
+  # coverage to Codecov. A job of its own so the upload token is never in
+  # reach of the test matrix or the smoke install, and the matrix stays
+  # coverage-free.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - run: COVERAGE=1 bundle exec rake test
+      # Catches a vulnerable locked gem the day it is published, between
+      # Dependabot runs.
+      - run: bundle exec bundler-audit check --update
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: true

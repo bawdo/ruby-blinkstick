@@ -1,0 +1,9 @@
+# Report and badge only: neither status ever fails a pull request.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true

@@ -1,0 +1,13 @@
+# Grants the logged-in desktop user access to BlinkStick hidraw nodes, so
+# this gem can open them without root or a udev group. It does not grant
+# raw USB access; see README.md#linux if another tool needs that.
+#
+# Install:
+#   sudo cp udev/60-blinkstick.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# Then unplug and replug the stick (or reboot). See README.md#linux for
+# details.
+
+KERNEL=="hidraw*", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="41e5", TAG+="uaccess"

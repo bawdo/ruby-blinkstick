@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a feature or another BlinkStick model.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The problem you are trying to solve, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: An API sketch, or how go-blinkstick or another library does it.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options: [macOS, Linux]
