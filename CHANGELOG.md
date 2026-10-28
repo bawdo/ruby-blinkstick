@@ -10,7 +10,7 @@ All notable changes to this project are recorded here. The format follows
 
 - Names: `Stick#name` and `Stick#name=` (stored in info block 1), `Blinkstick.open(name:)` and `Blinkstick.list(names: true)`, which returns `NamedInfo` values. `DuplicateNameError` is raised when two sticks share a name.
 - `Stick#write_info_block` writes info block 1 or 2 (EEPROM).
-- `Stick#mode=` sets the mode to `:ws2812` or `:ws2812_mirror` (EEPROM), and skips the write when the stick is already in it. The Pro modes are refused.
+- `Stick#mode=` sets the mode to `:ws2812` or `:ws2812_mirror` (EEPROM), and skips the write when the stick is already in it. After a write it waits until the stick answers with the new mode (it stops answering for 12 to 15 ms after a mode write), raising `DisconnectedError` after 250 ms. The Pro modes are refused.
 - `Stick#brightness_limit` and `Stick#brightness_limit=` cap the brightness of every colour written.
 - `Stick#inverse?`, `Stick#inverse=` and `Colour#inverse` flip colours for LEDs wired so 255 is off.
 - `Colour.random` and `Colour.random(vivid: true)`.

@@ -84,7 +84,9 @@ in followed by its own, so two real mode writes happen, reading each back. It
 restores the saved blocks and mode last, byte for byte (including a name that
 is not valid UTF-8), even if a step fails, and prints a line for every write,
 read and restore. It exits 1 on any mismatch or failed restore, or when the gem
-raises an error (the stick is busy, say).
+raises an error (the stick is busy, say). A stick has been seen refusing
+transfers for 12 to 15 ms after each mode write, which `mode=` waits out (for up
+to 250 ms) before the script reads the mode back.
 
 Ctrl-C before the first write stops the script as usual. Ctrl-C during the
 writes stops them, the restore still runs, and the script then ends as

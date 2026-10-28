@@ -11,6 +11,16 @@ module Blinkstick
       SETTABLE_MODES = { ws2812: 2, ws2812_mirror: 3 }.freeze
       private_constant :SETTABLE_MODES
 
+      # Seconds between reads while waiting for the stick to answer after a
+      # mode write.
+      MODE_POLL_INTERVAL = 0.005
+      private_constant :MODE_POLL_INTERVAL
+
+      # Seconds to wait for the stick to answer after a mode write. A real
+      # stick refuses transfers for 12 to 15 ms while it stores the mode.
+      MODE_SETTLE_TIMEOUT = 0.25
+      private_constant :MODE_SETTLE_TIMEOUT
+
       # Writes a user data block, padded with NULs to 32 bytes. This writes
       # EEPROM, which wears with use, so do not call it in a loop.
       #
@@ -67,7 +77,10 @@ module Blinkstick
       # Sets the LED mode, unless the stick is already in it. This writes
       # EEPROM, which wears with use, so call it once and not in a loop. The
       # read and the write happen under one lock, so no other thread's
-      # transfer lands between them.
+      # transfer lands between them. A stick stops answering for a moment
+      # after storing its mode (typically 12 to 15 ms), so after a write this
+      # waits, still holding the lock, until the stick answers again and
+      # reports the new mode, giving up after 250 ms. No write means no wait.
       #
       # @param mode [Symbol, Integer] :ws2812 (or 2) or :ws2812_mirror (or 3).
       #   The BlinkStick Pro modes (0, 1, :rgb, :rgb_inverse) are refused.
@@ -76,12 +89,16 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails,
+      #   or when it does not answer with the new mode within 250 ms of the write
       def mode=(mode)
         byte = settable_mode(mode)
         locked do
           current = with_reconnect("reads") { fetch(Report::MODE_ID, Report::MODE_SIZE) }
-          with_reconnect("writes") { @handle.write_feature(Report.mode(byte)) } unless current.getbyte(1) == byte
+          next if current.getbyte(1) == byte
+
+          with_reconnect("writes") { @handle.write_feature(Report.mode(byte)) }
+          await_mode(byte)
         end
         mode
       end
@@ -97,6 +114,34 @@ module Blinkstick
         return if bytes.bytesize <= Report::INFO_BLOCK_SIZE - 1
 
         raise ArgumentError, "name is #{bytes.bytesize} bytes, the most a stick holds is #{Report::INFO_BLOCK_SIZE - 1}"
+      end
+
+      # Reads the mode every MODE_POLL_INTERVAL until the stick answers with
+      # byte, without retries or reconnecting. The caller must hold the lock.
+      # BusyError, PermissionError and DisconnectedError from the handle pass
+      # through.
+      #
+      # @raise [DisconnectedError] when no read shows byte within MODE_SETTLE_TIMEOUT
+      def await_mode(byte)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + MODE_SETTLE_TIMEOUT
+        until mode_reads?(byte)
+          if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+            raise DisconnectedError, "#{info.serial.inspect} did not answer after the mode write " \
+                                     "(waited #{(MODE_SETTLE_TIMEOUT * 1000).round} ms)"
+          end
+
+          sleep MODE_POLL_INTERVAL
+        end
+      end
+
+      # One raw read of the mode. A failed attempt or a bad reply counts as
+      # not yet.
+      #
+      # @return [Boolean] true when the stick answered with byte
+      def mode_reads?(byte)
+        fetch(Report::MODE_ID, Report::MODE_SIZE).getbyte(1) == byte
+      rescue Backend::TransferFailed
+        false
       end
 
       # @return [Integer] the mode byte

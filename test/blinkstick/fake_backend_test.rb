@@ -93,6 +93,28 @@ class FakeBackendTest < Minitest::Test
     assert_raises(Blinkstick::Backend::TransferFailed) { queued.write_feature(FRAME) }
     after.write_feature(FRAME)
   end
+
+  def test_busy_after_mode_refuses_the_next_transfers_on_the_device
+    backend = FakeBackend.new(NANO, eeprom_writes: true, busy_after_mode: 2)
+    handle = backend.open(NANO)
+    handle.write_feature(Blinkstick::Report.info_block(2, "a"))
+    handle.write_feature(Blinkstick::Report.mode(3))
+
+    assert_raises(Blinkstick::Backend::TransferFailed) { handle.read_feature(4, 2) }
+    assert_raises(Blinkstick::Backend::TransferFailed) { backend.open(NANO).write_feature(FRAME) }
+    assert_equal [4, 3].pack("C*"), handle.read_feature(4, 2)
+  end
+
+  def test_busy_after_mode_can_be_queued_for_a_later_open
+    backend = FakeBackend.new(NANO, eeprom_writes: true)
+    backend.open(NANO).write_feature(Blinkstick::Report.mode(3))
+    backend.next_open(NANO.serial, busy_after_mode: 1)
+    handle = backend.open(NANO)
+    handle.write_feature(Blinkstick::Report.mode(2))
+
+    assert_raises(Blinkstick::Backend::TransferFailed) { handle.read_feature(4, 2) }
+    assert_equal [4, 2].pack("C*"), handle.read_feature(4, 2)
+  end
 end
 
 # Per device state: switches, unplugging, refusing and handle bookkeeping.

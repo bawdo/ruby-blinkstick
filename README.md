@@ -192,8 +192,10 @@ Blinkstick.list(names: true)
   strip them. A bad number or too many bytes raises `ArgumentError`, and a non String raises
   `TypeError`.
 - `stick.mode =` takes `:ws2812` (or 2) or `:ws2812_mirror` (or 3). In mirror mode `colour=`
-  still lights every LED, and reports 5 and 6 behave as in mode 2. The write takes about 50 ms
-  and needs no replug. Modes 0 and 1 are for the BlinkStick Pro: they raise `ArgumentError`, as
+  still lights every LED, and reports 5 and 6 behave as in mode 2. The change needs no replug.
+  The stick stops answering for a moment after a mode write (typically 12 to 15 ms), so
+  `mode=` waits until it answers with the new mode, raising `DisconnectedError` if it has not
+  within 250 ms. Modes 0 and 1 are for the BlinkStick Pro: they raise `ArgumentError`, as
   they can leave a Nano dark until it is replugged.
 - Names and info block bytes are whatever any tool last wrote, so they may not be valid UTF-8
   and may hold control characters. They come back as they are. Treat them as untrusted input,

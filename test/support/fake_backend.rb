@@ -33,13 +33,14 @@ class FakeBackend
   REFUSING = Refusing.new.freeze
 
   # What a device keeps whatever handles come and go: its EEPROM (mode and
-  # info blocks), its LEDs, whether it is plugged in, and the handles opened
-  # on it. leds is replaced, never changed in place, so a reference a test
-  # holds stays as it was.
+  # info blocks), its LEDs, whether it is plugged in, the handles opened on
+  # it, and how many more transfers it refuses after a mode write
+  # (busy_left). leds is replaced, never changed in place, so a reference a
+  # test holds stays as it was.
   class DeviceState
     DARK = Array.new(8, Blinkstick::Colour::OFF).freeze
 
-    attr_accessor :mode, :info_blocks, :refusal, :leds
+    attr_accessor :mode, :info_blocks, :refusal, :leds, :busy_left
     attr_reader :handles, :queued
 
     def initialize(mode:, info_blocks:)
@@ -48,6 +49,7 @@ class FakeBackend
       @leds = DARK
       @plugged = true
       @refusal = nil
+      @busy_left = 0
       @handles = []
       @queued = []
     end
@@ -90,8 +92,8 @@ class FakeBackend
 
   attr_reader :handles
 
-  # @param switches [Hash] failure switches (fail_writes and so on, or gone)
-  #   for the first Handle opened per device; later opens are clean unless
+  # @param switches [Hash] failure switches (fail_writes and so on, gone or
+  #   busy_after_mode) for the first Handle opened per device; later opens are clean unless
   #   #next_open queued some
   # @param eeprom_writes [Boolean] let handles accept reports 2, 3 and 4
   # @param mode [Integer] every device's starting mode byte

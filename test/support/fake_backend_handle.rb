@@ -24,9 +24,20 @@ class FakeBackend
       [report_id].pack("C") + @state.info_blocks.fetch(report_id - 1).b.ljust(size, "\0")
     end
 
+    # @return [Boolean] true, using one up, while the device is still busy after a mode write
+    def storing_mode?
+      return false unless @state.busy_left.positive?
+
+      @state.busy_left -= 1
+      true
+    end
+
+    # A mode write leaves the device refusing the next busy_after_mode
+    # transfers, from any handle, as a real stick does for 12 to 15 ms.
     def apply_eeprom(id, report)
       if id == Blinkstick::Report::MODE_ID
         @state.mode = report.getbyte(1)
+        @state.busy_left = @busy_after_mode
       elsif EEPROM_IDS.include?(id)
         @state.info_blocks = @state.info_blocks.merge(id - 1 => report.byteslice(1..).b)
       end
@@ -39,7 +50,10 @@ class FakeBackend
   # wrong_id_reads are how many attempts in a row go wrong before the fake
   # behaves (raising TransferFailed, returning one byte too few, or
   # returning the wrong first byte); gone makes every transfer raise
-  # DisconnectedError. The LEDs, mode and info blocks live in the device's
+  # DisconnectedError; busy_after_mode is how many transfers in a row the
+  # device refuses with TransferFailed after this handle writes the mode,
+  # whichever handle makes them (as IOKit reports kIOReturnNotResponding
+  # while a real stick stores its mode). The LEDs, mode and info blocks live in the device's
   # state, so they survive reopening and are shared by every handle on one
   # serial; eeprom_writes lets reports 2, 3 and 4 through.
   class Handle
@@ -59,6 +73,7 @@ class FakeBackend
       @state = state
       @eeprom_writes = eeprom_writes
       @gone = gone
+      @busy_after_mode = failures.delete(:busy_after_mode) || 0
       @failures_left = check_failures(failures)
       @closed = false
       start_records
@@ -142,6 +157,7 @@ class FakeBackend
       @attempts += 1
       raise Blinkstick::DisconnectedError, "#{device.serial} unplugged" if @gone
       raise Blinkstick::Backend::TransferFailed, "#{device.serial} busy" if use_up?(failure)
+      raise Blinkstick::Backend::TransferFailed, "#{device.serial} storing its mode" if storing_mode?
     end
 
     # @return [Boolean] true, using one up, while the named failure has any left
