@@ -153,7 +153,9 @@ jobs:
         # Publish exactly the gem and attestation this tag should have
         # produced, so a stray file in an artifact can never be published
         # instead. A re-run after a push that succeeded skips the push and
-        # goes on to the attestation check. The explicit --attestation also
+        # goes on to the attestation check, but only if rubygems.org has the
+        # same gem this run built, so github-release never attaches a
+        # different one. The explicit --attestation also
         # keeps RubyGems 4.1 from running sigstore-cli to sign on its own in
         # this job.
         run: |
@@ -179,10 +181,17 @@ jobs:
               exit 1
             fi
           done
-          status="$(curl -sS -o /dev/null -w '%{http_code}' \
+          published="$RUNNER_TEMP/published.json"
+          status="$(curl -sS -o "$published" -w '%{http_code}' \
             "https://rubygems.org/api/v2/rubygems/ruby-blinkstick/versions/$version.json" || true)"
           if [ "$status" = "200" ]; then
-            echo "::notice::rubygems.org already has $version, not pushing again"
+            remote_sha="$(jq -r '.sha // empty' "$published")"
+            local_sha="$(sha256sum "$file" | cut -d' ' -f1)"
+            if [ "$remote_sha" != "$local_sha" ]; then
+              echo "::error::rubygems.org has $version with sha256 ${remote_sha:-unknown}, this run built $local_sha"
+              exit 1
+            fi
+            echo "::notice::rubygems.org already has $version with the same sha256, not pushing again"
           else
             gem push --attestation "./$file.sigstore.json" "./$file"
           fi
