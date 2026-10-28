@@ -22,7 +22,7 @@ module Blinkstick
       ObjectSpace.define_finalizer(self, self.class.releaser(handle))
     end
 
-    # Builds the finalizer here, not in an instance method, so it holds the
+    # Builds the finaliser here, not in an instance method, so it holds the
     # handle only and the Stick itself can still be collected.
     #
     # @api private

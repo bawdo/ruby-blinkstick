@@ -183,6 +183,11 @@ class HidrawListTest < Minitest::Test
     end
   end
 
+  # The USB IDs live once, on Blinkstick, so the backends cannot drift.
+  def test_matches_on_the_gem_wide_usb_ids
+    assert_empty Hidraw.constants(false) & %i[VENDOR_ID PRODUCT_ID]
+  end
+
   def test_missing_sysfs_lists_nothing
     assert_empty Hidraw.new(sysfs: File.join(FIXTURES, "nowhere"), dev: "/dev").list
   end

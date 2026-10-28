@@ -18,9 +18,6 @@ module Blinkstick
     #
     # @api private
     class IOKit
-      VENDOR_ID = 0x20A0
-      PRODUCT_ID = 0x41E5
-
       # kIOHIDOptionsTypeNone: open the device shared, never seized.
       OPEN_OPTIONS = 0
 

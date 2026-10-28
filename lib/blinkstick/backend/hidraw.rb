@@ -10,9 +10,6 @@ module Blinkstick
     #
     # @api private
     class Hidraw
-      VENDOR_ID = 0x20A0
-      PRODUCT_ID = 0x41E5
-
       # The ioctl request number for HIDIOCSFEATURE of the given length:
       # direction read/write (3), size, type 'H' (0x48) and number 6.
       #

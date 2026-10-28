@@ -55,6 +55,11 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       assert_equal 0, IOKit::OPEN_OPTIONS
     end
 
+    # The USB IDs live once, on Blinkstick, so the backends cannot drift.
+    def test_matches_on_the_gem_wide_usb_ids
+      assert_empty IOKit.constants(false) & %i[VENDOR_ID PRODUCT_ID]
+    end
+
     private
 
     # Checks the unsigned constant and the negative Integer ffi hands back
