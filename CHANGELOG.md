@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `Stick#[]=` sets one LED and leaves the others as they are, using one report. A bad index raises `IndexError`.
+- `Stick#frame=` sets every LED at once, one colour each. It needs exactly one colour per LED of the model, and nothing is sent if any colour is invalid.
+- `Stick#frame` and `Stick#[]` read the LEDs back as `Colour` values. Reads always ask the stick, and a failing read raises `DisconnectedError` after three attempts.
+- `Stick#mode` reads the device mode as `:rgb`, `:rgb_inverse`, `:ws2812` or `:ws2812_mirror`, or the raw byte for a mode the gem does not know.
+- `Stick#info_block` reads info block 1 or 2, read only. The bytes are whatever any tool last wrote, so treat them as untrusted.
+
 ## [0.1.0] - 2026-10-28
 
 ### Added

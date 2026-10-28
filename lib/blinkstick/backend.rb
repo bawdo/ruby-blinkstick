@@ -10,9 +10,12 @@ module Blinkstick
   # A backend responds to `#list`, returning an Array of {Device}, and
   # `#open(device)`, returning a handle. A handle responds to
   # `#write_feature(report)`, where report is a binary String whose first
-  # byte is the report ID, and to `#close`, which may be called more than
-  # once. Handles raise {Blinkstick::Error} subclasses, or {TransferFailed}
-  # for a failure worth trying again.
+  # byte is the report ID; to `#read_feature(report_id, size)`, returning a
+  # binary String whose first byte is the report ID and whose length is the
+  # number of bytes the OS returned (size includes the ID byte); and to
+  # `#close`, which may be called more than once. Handles raise
+  # {Blinkstick::Error} subclasses, or {TransferFailed} for a failure worth
+  # trying again, from either transfer.
   #
   # @api private
   module Backend

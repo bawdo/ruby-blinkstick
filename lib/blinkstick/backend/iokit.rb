@@ -5,9 +5,10 @@ require_relative "../../blinkstick"
 
 module Blinkstick
   module Backend
-    # The macOS backend. It finds sticks with an IOHIDManager and sends
-    # feature reports with IOHIDDeviceSetReport, calling IOKit and
-    # CoreFoundation through ffi. Sticks are opened shared, never seized.
+    # The macOS backend. It finds sticks with an IOHIDManager and moves
+    # feature reports with IOHIDDeviceSetReport and IOHIDDeviceGetReport,
+    # calling IOKit and CoreFoundation through ffi. Sticks are opened
+    # shared, never seized.
     #
     # CoreFoundation ownership follows Apple's Create rule: anything returned
     # by a Create or Copy call is released here, and anything returned by a
@@ -57,6 +58,7 @@ module Blinkstick
         attach_function :hid_device_open, :IOHIDDeviceOpen, %i[pointer uint32], :int
         attach_function :hid_device_close, :IOHIDDeviceClose, %i[pointer uint32], :int
         attach_function :hid_device_set_report, :IOHIDDeviceSetReport, %i[pointer int long buffer_in long], :int
+        attach_function :hid_device_get_report, :IOHIDDeviceGetReport, %i[pointer int long buffer_inout pointer], :int
 
         UTF8 = 0x08000100 # kCFStringEncodingUTF8
         SINT32 = 3 # kCFNumberSInt32Type
@@ -149,7 +151,8 @@ module Blinkstick
       PROPERTY_KEYS = %w[VendorID ProductID VersionNumber Manufacturer Product SerialNumber].freeze
       private_constant :OPEN_REASONS, :PROPERTY_KEYS
 
-      # Maps a failed IOHIDDeviceSetReport to the error a handle raises.
+      # Maps a failed IOHIDDeviceSetReport or IOHIDDeviceGetReport to the
+      # error a handle raises.
       #
       # @param code [Integer] the IOReturn, signed or unsigned
       # @return [Class] a {Blinkstick::Error} subclass
@@ -201,13 +204,30 @@ module Blinkstick
         # @raise [DisconnectedError] when the stick is unplugged
         # @raise [TransferFailed] for any other failed transfer
         def write_feature(report)
-          raise ClosedError, "#{name} is closed" if @closed
+          ensure_open
+          check(Native.hid_device_set_report(@device, REPORT_TYPE_FEATURE, report.getbyte(0), report,
+                                             report.bytesize), "writing")
+        end
 
-          code = Native.hid_device_set_report(@device, REPORT_TYPE_FEATURE, report.getbyte(0), report,
-                                              report.bytesize)
-          return if code.zero?
-
-          raise IOKit.error_for(code), "#{name}: writing a report failed (#{IOKit.describe(code)})"
+        # Reads a feature report. The report ID stays as the buffer's first
+        # byte and the length cell starts at size, so the length IOKit hands
+        # back counts the ID (as hidapi's macOS get_report does for a non-zero
+        # ID). Only a run against real hardware confirms this.
+        #
+        # @param report_id [Integer] the report to ask for
+        # @param size [Integer] the report's length, including the ID byte
+        # @return [String] binary, the bytes IOKit returned, report ID first
+        # @raise [ClosedError] after {#close}
+        # @raise [DisconnectedError] when the stick is unplugged
+        # @raise [TransferFailed] for any other failed transfer
+        def read_feature(report_id, size)
+          ensure_open
+          buffer = FFI::MemoryPointer.new(:uint8, size)
+          buffer.put_uint8(0, report_id)
+          length = FFI::MemoryPointer.new(:long) # CFIndex
+          length.write_long(size)
+          check(Native.hid_device_get_report(@device, REPORT_TYPE_FEATURE, report_id, buffer, length), "reading")
+          buffer.read_bytes(length.read_long.clamp(0, size))
         end
 
         # Closes the device, then releases the reference the handle owns.
@@ -230,6 +250,16 @@ module Blinkstick
 
         def name
           @serial || "the stick"
+        end
+
+        def ensure_open
+          raise ClosedError, "#{name} is closed" if @closed
+        end
+
+        def check(code, action)
+          return if code.zero?
+
+          raise IOKit.error_for(code), "#{name}: #{action} a report failed (#{IOKit.describe(code)})"
         end
       end
 
