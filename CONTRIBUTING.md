@@ -35,11 +35,17 @@ bundle exec rake hardware
 ```
 
 The tests list sticks, open one by serial, set it red and turn it off, and
-(with a Nano and a Square both attached) colour each and turn both off. On
+(with a Nano and a Square both attached) colour each and turn both off. For
+every attached stick they also check that a frame reads back equal to what was
+written, that setting one LED changes only that LED, that the mode is
+`:ws2812`, and that info blocks 1 and 2 are Strings of at most 32 bytes. On
 macOS they also start two Ruby processes that each open the same stick and
-hold it open at the same time before writing. That shared open is the check
-that decides a release: if it fails, the release stops. Attach a Nano and a
-Square for the full run; without both, the pair test skips with a message.
+hold it open at the same time before writing, and a third check where one
+process writes a frame and holds the stick open while a second process, with
+its own open handle, reads that frame back. Those shared opens are the checks
+that decide a release: if the shared open or the shared read fails on macOS,
+the release stops. Attach a Nano and a Square for the full run; without both,
+the pair test skips with a message.
 
 Automated tests must never write EEPROM on a real stick: no name, info block
 or mode writes against hardware. EEPROM wears out, and a contributor's stick
