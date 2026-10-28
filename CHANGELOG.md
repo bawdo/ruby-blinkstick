@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Releases carry SLSA build provenance, attached on rubygems.org and the GitHub release, and checked by the release workflow before publishing.
+
 ### Fixed
 
 - The gem build now fails if a documented file is missing, instead of shipping without it.

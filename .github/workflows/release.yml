@@ -58,10 +58,72 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Publishes the gem the build job checked. It runs no repository code and
-  # installs nothing, so the OIDC token only ever meets rubygems.org itself.
-  publish:
+  # Makes SLSA build provenance for the gem the build job checked and
+  # verifies it before anything is published. There is no checkout and no
+  # Ruby: only first-party actions and the gh CLI that ships on the runner.
+  # This job's id-token cannot mint a rubygems.org key because the trusted
+  # publisher names the rubygems environment and this job has none. If the
+  # publisher is ever recreated without an environment, that stops being
+  # true.
+  attest:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+      # Attest exactly the gem this tag should have produced, so a stray
+      # file in the artifact is never attested instead.
+      - name: Check the artifact holds only the expected gem
+        id: gem
+        run: |
+          file="ruby-blinkstick-${GITHUB_REF_NAME#v}.gem"
+          if [ ! -f "$file" ]; then
+            echo "::error::expected $file was not found"
+            exit 1
+          fi
+          for f in ./*.gem; do
+            if [ "$f" != "./$file" ]; then
+              echo "::error::unexpected gem $f"
+              exit 1
+            fi
+          done
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        id: attest
+        with:
+          subject-path: ${{ steps.gem.outputs.file }}
+      # A bundle that does not verify for this repository, workflow and tag
+      # stops the release here, before publish starts.
+      - name: Verify the attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          file="ruby-blinkstick-${GITHUB_REF_NAME#v}.gem"
+          cp "$ATTESTATION_BUNDLE" "$file.sigstore.json"
+          gh attestation verify "$file" --bundle "$file.sigstore.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "$GITHUB_REF" \
+            --deny-self-hosted-runners
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: attestation
+          path: ${{ steps.gem.outputs.file }}.sigstore.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # Publishes the gem the build job checked, with the attestation the attest
+  # job verified. It runs no repository code and installs nothing, so the
+  # OIDC token only ever meets rubygems.org itself.
+  publish:
+    needs: [build, attest]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The rubygems environment only accepts v* tags, and the rubygems.org
@@ -75,6 +137,9 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: package
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: attestation
       # No checkout, so there is no .ruby-version to read, and no Bundler:
       # gem push needs nothing from the Gemfile.
       - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
@@ -84,10 +149,15 @@ jobs:
       # action swaps the job's OIDC token for a short-lived rubygems.org key.
       - uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
       - name: Publish the expected gem
-        # Publish exactly the gem this tag should have produced, so a stray
-        # file in the artifact can never be published instead.
+        # Publish exactly the gem and attestation this tag should have
+        # produced, so a stray file in an artifact can never be published
+        # instead. A re-run after a push that succeeded skips the push and
+        # goes on to the attestation check. The explicit --attestation also
+        # keeps RubyGems 4.1 from running sigstore-cli to sign on its own in
+        # this job.
         run: |
-          file="ruby-blinkstick-${GITHUB_REF_NAME#v}.gem"
+          version="${GITHUB_REF_NAME#v}"
+          file="ruby-blinkstick-$version.gem"
           if [ ! -f "$file" ]; then
             echo "::error::expected $file was not found"
             exit 1
@@ -98,12 +168,49 @@ jobs:
               exit 1
             fi
           done
-          gem push "./$file"
+          if [ ! -f "$file.sigstore.json" ]; then
+            echo "::error::expected $file.sigstore.json was not found"
+            exit 1
+          fi
+          for f in ./*.sigstore.json; do
+            if [ "$f" != "./$file.sigstore.json" ]; then
+              echo "::error::unexpected attestation $f"
+              exit 1
+            fi
+          done
+          status="$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://rubygems.org/api/v2/rubygems/ruby-blinkstick/versions/$version.json" || true)"
+          if [ "$status" = "200" ]; then
+            echo "::notice::rubygems.org already has $version, not pushing again"
+          else
+            gem push --attestation "./$file.sigstore.json" "./$file"
+          fi
+      # rubygems.org can take a moment to index a new version, so poll for a
+      # short while. A version live without an attestation fails the run for
+      # the maintainer to decide on; the workflow never yanks.
+      - name: Check rubygems.org recorded the attestation
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          url="https://rubygems.org/api/v1/attestations/ruby-blinkstick-$version.json"
+          attempt=1
+          while :; do
+            if curl -fsS "$url" | jq -e 'type == "array" and length > 0' >/dev/null; then
+              echo "rubygems.org has an attestation for $version"
+              exit 0
+            fi
+            if [ "$attempt" -ge 10 ]; then
+              break
+            fi
+            attempt=$((attempt + 1))
+            sleep 6
+          done
+          echo "::error::rubygems.org has no attestation for $version"
+          exit 1
 
   # Creates the GitHub release once rubygems.org has the gem, with the notes
-  # the build job extracted. There is no checkout and nothing is installed,
-  # so this job's write token reaches only the gh CLI that ships on the
-  # runner.
+  # the build job extracted and the gem and attestation as assets. There is
+  # no checkout and nothing is installed, so this job's write token reaches
+  # only the gh CLI that ships on the runner.
   github-release:
     needs: publish
     runs-on: ubuntu-latest
@@ -114,18 +221,33 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: attestation
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        # A published release for the tag, such as one made by hand, is left
-        # alone, so a re-run never overwrites it. gh does not see drafts, so
-        # a draft for the tag would get a second release beside it.
+        # A published release for the tag, such as one made by hand, is never
+        # overwritten: a re-run only uploads whichever of the gem and
+        # attestation it is missing. gh does not see drafts, so a draft for
+        # the tag would get a second release beside it.
         run: |
           tag="$GITHUB_REF_NAME"
+          file="ruby-blinkstick-${tag#v}.gem"
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "::notice::release $tag already exists, leaving it as it is"
+            existing="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+            for asset in "$file" "$file.sigstore.json"; do
+              if printf '%s\n' "$existing" | grep -qxF "$asset"; then
+                echo "::notice::release $tag already has $asset"
+              else
+                gh release upload "$tag" "$asset"
+              fi
+            done
             exit 0
           fi
           gh release create "$tag" --verify-tag --title "$tag" \
-            --notes-file release-notes.md
+            --notes-file release-notes.md "$file" "$file.sigstore.json"
