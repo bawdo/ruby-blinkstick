@@ -11,8 +11,8 @@ Gem::Specification.new do |spec|
   spec.summary = "Drive BlinkStick Nano and Square USB LEDs from Ruby."
   spec.description = <<~DESC.tr("\n", " ").strip
     Drive BlinkStick Nano and Square USB LEDs from Ruby. Unofficial, and not
-    affiliated with Agile Innovative. 0.0.1 is a placeholder that reserves the
-    gem name.
+    affiliated with Agile Innovative. Releases before the implementation lands
+    are placeholders that reserve the gem name.
   DESC
   spec.homepage = "https://github.com/bawdo/ruby-blinkstick"
   spec.license = "MIT"

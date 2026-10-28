@@ -2,6 +2,6 @@
 
 require_relative "blinkstick/version"
 
-# 0.0.1 is a placeholder that reserves the gem name and does nothing.
+# A placeholder that reserves the gem name and does nothing yet.
 module Blinkstick
 end
