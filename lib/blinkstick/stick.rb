@@ -11,6 +11,7 @@ module Blinkstick
   class Stick
     include Eeprom
     include Handover
+    include Lighting
 
     # @return [Info] the identity of this stick
     attr_reader :info
@@ -23,6 +24,9 @@ module Blinkstick
       @info = info
       @mutex = Mutex.new
       @closed = false
+      @limit = 255
+      @inverse = false
+      @last = nil
       ObjectSpace.define_finalizer(self, self.class.releaser(handle))
     end
 
@@ -49,7 +53,7 @@ module Blinkstick
     # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def colour=(colour)
-      write(Report.frame([Colour.parse(colour)] * info.model.leds))
+      write_frame([Colour.parse(colour)] * info.model.leds)
     end
 
     # Sets one LED, leaving the others as they are.
@@ -64,9 +68,8 @@ module Blinkstick
     # @raise [PermissionError] when the system refuses access mid-transfer
     # @raise [DisconnectedError] when the stick stops responding
     def []=(index, colour)
-      parsed = Colour.parse(colour)
       check_index(index)
-      write(Report.led(index, parsed))
+      write_led(index, Colour.parse(colour))
       colour
     end
 
@@ -89,33 +92,7 @@ module Blinkstick
         raise ArgumentError, "a #{model.name} has #{model.leds} LEDs, got #{list.size} colours"
       end
 
-      write(Report.frame(list.map { |colour| Colour.parse(colour) }))
-    end
-
-    # Reads every LED back from the stick. Nothing is cached: each call asks
-    # the stick.
-    #
-    # @return [Array<Colour>] frozen, one per LED of the model
-    # @raise [ClosedError] after {#close}
-    # @raise [BusyError] when another program holds the stick mid-transfer
-    # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
-    def frame
-      Report.decode_frame(read(Report::FRAME_ID, Report::FRAME_SIZE), info.model.leds)
-    end
-
-    # Reads one LED back from the stick, by reading the whole frame.
-    #
-    # @param index [Integer] LED index, 0 to one less than the model's LED count (a Nano takes 0 or 1, a Square 0 to 7)
-    # @return [Colour]
-    # @raise [IndexError] before anything is sent, when index is not an Integer within the model's LEDs
-    # @raise [ClosedError] after {#close}
-    # @raise [BusyError] when another program holds the stick mid-transfer
-    # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
-    def [](index)
-      check_index(index)
-      frame.fetch(index)
+      write_frame(list.map { |colour| Colour.parse(colour) })
     end
 
     # Reads the LED mode from the stick.
@@ -211,10 +188,15 @@ module Blinkstick
     # Holds the lock across every attempt, so transfers from other threads
     # cannot land in between.
     def transfer(what, &)
+      locked { with_retries(what, &) }
+    end
+
+    # Holds the lock, refusing a closed stick.
+    def locked
       @mutex.synchronize do
         raise ClosedError, "#{info.serial} is closed" if @closed
 
-        with_retries(what, &)
+        yield
       end
     end
 

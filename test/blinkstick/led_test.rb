@@ -27,7 +27,7 @@ class LedTest < Minitest::Test
 
     assert_equal [Report.led(3, RED)], handle.writes
     assert_equal({ 5 => 1 }, handle.writes_by_id)
-    assert_empty handle.reads_by_id
+    assert_equal({ 6 => 1 }, handle.reads_by_id)
   end
 
   def test_assignment_returns_the_colour_argument
@@ -81,7 +81,7 @@ class LedTest < Minitest::Test
     stick[0] = :red
 
     assert_equal [Report.led(0, RED)], handle.writes
-    assert_equal 3, handle.attempts
+    assert_equal 4, handle.attempts, "one seeding read, then the write on its third attempt"
   end
 
   def test_failed_writes_leave_leds_untouched
@@ -95,13 +95,23 @@ class LedTest < Minitest::Test
   def test_concurrent_led_and_frame_writers_never_interleave
     stick = open_stick(FakeBackend.nano)
 
-    SHADES.each_with_index.map { |colour, i| Thread.new { 50.times { write_one(stick, i, colour) } } }.each(&:join)
+    run_together(stick)
 
     assert_equal 500, handle.writes.size
     assert_equal handle.writes, split_stream, "reports interleaved on the wire"
   end
 
   private
+
+  # Starts every writer thread at once, behind a Queue gate.
+  def run_together(stick)
+    gate = Queue.new
+    threads = SHADES.each_with_index.map do |colour, i|
+      Thread.new { gate.pop and 50.times { write_one(stick, i, colour) } }
+    end
+    SHADES.size.times { gate << :go }
+    threads.each(&:join)
+  end
 
   def write_one(stick, thread, colour)
     thread.even? ? stick[thread % 2] = colour : stick.frame = [colour, colour]
@@ -122,7 +132,10 @@ class LedTest < Minitest::Test
     sizes = { Report::LED_ID => Report::LED_SIZE, Report::FRAME_ID => Report::FRAME_SIZE }
     bytes = handle.stream.dup
     reports = []
-    reports << bytes.shift(sizes.fetch(bytes.first)).pack("C*") until bytes.empty?
+    until bytes.empty?
+      size = sizes[bytes.first] or flunk "unknown report ID #{bytes.first} on the wire"
+      reports << bytes.shift(size).pack("C*")
+    end
     reports
   end
 end

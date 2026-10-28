@@ -7,6 +7,7 @@ require_relative "blinkstick/model"
 require_relative "blinkstick/report"
 require_relative "blinkstick/stick/eeprom"
 require_relative "blinkstick/stick/handover"
+require_relative "blinkstick/stick/lighting"
 require_relative "blinkstick/stick"
 require_relative "blinkstick/names"
 
