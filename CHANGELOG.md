@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Added
 
 - Names: `Stick#name` and `Stick#name=` (stored in info block 1), `Blinkstick.open(name:)` and `Blinkstick.list(names: true)`, which returns `NamedInfo` values. `DuplicateNameError` is raised when two sticks share a name.
