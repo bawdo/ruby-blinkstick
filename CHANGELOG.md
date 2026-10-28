@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Added
 
 - `Stick#[]=` sets one LED and leaves the others as they are, using one report. A bad index raises `IndexError`.
