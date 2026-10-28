@@ -25,7 +25,6 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
 
-  spec.files = (Dir["lib/**/*.rb"] + Dir["udev/*"] +
-                %w[LICENSE README.md CHANGELOG.md CAPABILITIES.md]).select { File.file?(it) }
+  spec.files = Dir["lib/**/*.rb", "udev/*"] + %w[LICENSE README.md CHANGELOG.md CAPABILITIES.md]
   spec.require_paths = ["lib"]
 end
