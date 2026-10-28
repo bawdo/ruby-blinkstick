@@ -12,9 +12,10 @@ of BlinkStick.
 
 ## Status
 
-This gem is a placeholder that reserves the name and does nothing else yet. The implementation
-will port [go-blinkstick](https://github.com/bawdo/go-blinkstick). See
-[CAPABILITIES.md](CAPABILITIES.md) for the features it will cover.
+Version 0.1.0 finds a BlinkStick Nano or Square, opens it, sets every LED to a colour and
+turns them off, on macOS and Linux. Single LEDs, frames, effects and the rest are still to
+come. [CAPABILITIES.md](CAPABILITIES.md) lists what is supported now and the Ruby method for
+each feature.
 
 ## Install
 
@@ -34,6 +35,51 @@ you `require "blinkstick"` and use the `Blinkstick` module.
 ## Requirements
 
 - Ruby 3.4 or later.
+- macOS or Linux (Windows is not supported).
+- Nothing else to install. The gem needs no system library and no compiler: its one
+  dependency, `ffi`, installs as a prebuilt gem, and it is only loaded on macOS. Linux talks
+  to the stick through `hidraw` using Ruby's standard library alone. Linux also needs the
+  udev rule described below.
+
+## Quick start
+
+```ruby
+require "blinkstick"
+
+Blinkstick.list
+# => [#<data Blinkstick::Info serial="BS072777-3.0", version="3.0",
+#      manufacturer="Agile Innovative Ltd", product="BlinkStick",
+#      model=#<data Blinkstick::Model name="Nano", leds=2>>]
+
+Blinkstick.open do |stick|         # the first stick; the block form closes it, like File.open
+  stick.colour = :cornflowerblue   # set every LED
+  stick.colour = "#ff8800"
+  stick.colour = [255, 136, 0]
+  stick.off                        # every LED off
+end
+
+stick = Blinkstick.open(serial: "BS072777-3.0")  # without a block, you close it
+stick.info                         # => Blinkstick::Info
+stick.close
+stick.closed?                      # => true
+
+Blinkstick::Colour.parse("255,136,0").hex   # => "#ff8800"
+Blinkstick::Colour.names.first(3)           # => ["aliceblue", "antiquewhite", "aqua"]
+```
+
+A colour can be a CSS colour name (a string or symbol, any case), hex (`#rgb` or `#rrggbb`,
+with or without the `#`), `"r,g,b"`, or an array of three integers.
+
+Failures raise subclasses of `Blinkstick::Error`: `NotFoundError`, `BusyError`,
+`PermissionError`, `UnsupportedModelError`, `ClosedError` and `DisconnectedError`. A bad
+colour raises `Blinkstick::InvalidColourError`, which is an `ArgumentError`.
+
+### Sharing a stick
+
+Sticks are shared on both platforms, so several programs (and several Ruby processes) can
+drive the same stick at once, and the last write is what shows. The exception is a program
+that seizes the stick for itself, as ones built on hidapi do on macOS. While that program has
+it, this gem raises `Blinkstick::BusyError`. Close the other program and try again.
 
 ## Linux
 

@@ -33,11 +33,17 @@ jobs:
       - run: bundle exec rake
 
   # Builds the gem, installs it into a scratch GEM_HOME and requires it
-  # from outside the repository, catching a gem that builds and passes its
-  # tests but will not install or load.
+  # from outside the repository, on Linux and macOS, catching a gem that
+  # builds and passes its tests but will not install or load. The script
+  # fetches the locked ffi and refuses it unless its sha256 is in the
+  # lockfile's CHECKSUMS.
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -16,3 +16,4 @@ end
 
 require "minitest/autorun"
 require "blinkstick"
+require "support/fake_backend"

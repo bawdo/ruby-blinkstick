@@ -25,12 +25,39 @@ needs them to pass before it can merge.
 
 ## Hardware
 
-Hardware tests arrive with the implementation. None are needed for most
-changes.
+Hardware tests drive real sticks and are opt-in. `bundle exec rake` runs
+`test/hardware/hardware_test.rb` too, but every test in it skips unless
+`BLINKSTICK_HARDWARE=1`, so ordinary runs and CI never touch a device. To run
+them for real:
+
+```sh
+bundle exec rake hardware
+```
+
+The tests list sticks, open one by serial, set it red and turn it off, and
+(with a Nano and a Square both attached) colour each and turn both off. On
+macOS they also start two Ruby processes that each open the same stick and
+hold it open at the same time before writing. That shared open is the check
+that decides a release: if it fails, the release stops. Attach a Nano and a
+Square for the full run; without both, the pair test skips with a message.
 
 Automated tests must never write EEPROM on a real stick: no name, info block
 or mode writes against hardware. EEPROM wears out, and a contributor's stick
-is theirs.
+is theirs. These tests set colours and turn the stick off, nothing else.
+
+On Linux you need the udev rule from the `## Linux` section of the
+[README](README.md), then a replug, or the tests fail with a permission error.
+
+### Manual check before a release
+
+Run this once on each OS (macOS and Linux) with a stick attached.
+
+1. In `irb -Ilib -rblinkstick`, run `stick = Blinkstick.open`, unplug the
+   stick, then run `stick.colour = :red`. Expect a `Blinkstick::DisconnectedError`,
+   not a raw `Errno` or ffi error.
+2. Plug the stick back in and run `serial = Blinkstick.list.first.serial`.
+   Unplug it again, then run `Blinkstick.open(serial: serial)`. Expect a
+   `Blinkstick::NotFoundError`.
 
 ## Changes
 
