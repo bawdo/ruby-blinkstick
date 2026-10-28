@@ -11,6 +11,7 @@ require_relative "blinkstick/stick/lighting"
 require_relative "blinkstick/stick/reconnect"
 require_relative "blinkstick/stick"
 require_relative "blinkstick/names"
+require_relative "blinkstick/cancellation"
 
 # Finds and drives BlinkStick Nano and Square USB LED sticks on macOS and Linux.
 #
