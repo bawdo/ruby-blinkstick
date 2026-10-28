@@ -58,6 +58,18 @@ line to the rule as well:
 SUBSYSTEM=="usb", ATTR{idVendor}=="20a0", ATTR{idProduct}=="41e5", TAG+="uaccess"
 ```
 
+## Verifying a release
+
+From 0.0.2, every release carries build provenance from the release workflow. To check that a gem
+came from this repository's workflow, with the [GitHub CLI](https://cli.github.com/):
+
+```sh
+gem fetch ruby-blinkstick -v 0.0.2
+gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick
+```
+
+Swap in the version you are checking. [SECURITY.md](SECURITY.md) has the details.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

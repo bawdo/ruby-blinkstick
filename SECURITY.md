@@ -28,3 +28,18 @@ will depend on. Report those upstream.
 Releases are published from GitHub Actions through rubygems.org trusted
 publishing from 0.0.1 onward. A version that rubygems.org does not attribute
 to this repository's workflow did not come from it.
+
+From 0.0.2, every release also carries SLSA build provenance, made and
+verified by the release workflow before the gem is published. It is attached
+to the version on rubygems.org and to the GitHub release. To check that a gem
+was built by this repository's release workflow:
+
+```sh
+gem fetch ruby-blinkstick -v 0.0.2
+gh attestation verify ruby-blinkstick-0.0.2.gem --repo bawdo/ruby-blinkstick
+```
+
+The trusted publisher on rubygems.org must keep naming the `rubygems`
+environment. The job that makes the attestation can request an OIDC token but
+has no environment, so that name is what stops it minting a rubygems.org key.
+A publisher recreated without an environment would undo that.
