@@ -36,6 +36,10 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
       assert_respond_to IOKit::Native, :hid_device_set_report
     end
 
+    def test_get_report_resolves
+      assert_respond_to IOKit::Native, :hid_device_get_report
+    end
+
     def test_list_without_sticks_is_empty_array
       devices = IOKit.new.list
 
@@ -79,24 +83,69 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
     end
   end
 
-  # Drives open and the handle against stubbed Native device calls, so no
-  # test reaches IOKit or the stick attached to the machine.
-  class IOKitHandleTest < Minitest::Test
+  # Stubs every Native device call, so no test reaches IOKit or the stick
+  # attached to the machine. Shared by the handle and read tests.
+  module IOKitStubs
     IOKit = Blinkstick::Backend::IOKit
     SIGNED = 2**32
     SERIAL = "BS000001-3.1"
-    REPORT = ("\x06\x00".b + ("\x01".b * 24)).freeze
     NOT_ATTACHED = 0xE00002D9 - SIGNED
 
     # Every Native function that touches a device, including the retain and
     # release of its reference. Each test replaces all of them, so a missed
     # stub fails instead of reaching IOKit or CoreFoundation.
-    DEVICE_CALLS = %i[cf_retain cf_release hid_device_open hid_device_close hid_device_set_report].freeze
+    DEVICE_CALLS = %i[cf_retain cf_release hid_device_open hid_device_close hid_device_set_report
+                      hid_device_get_report].freeze
 
-    WRITE_ERRORS = {
+    TRANSFER_ERRORS = {
       NOT_ATTACHED => Blinkstick::DisconnectedError,
       0xE00002BC - SIGNED => Blinkstick::Backend::TransferFailed
     }.freeze
+
+    private
+
+    # A pointer that is never dereferenced: only stubs ever receive it.
+    def ref
+      @ref ||= FFI::Pointer.new(1)
+    end
+
+    def new_handle
+      IOKit::Handle.new(ref, serial: SERIAL)
+    end
+
+    # Replaces every device call on Native for the block and returns the
+    # calls made. A call named in returns gives that value, or calls it with
+    # the arguments when it is a Proc; any other call fails.
+    def with_native(returns)
+      calls = []
+      originals = DEVICE_CALLS.to_h { |name| [name, IOKit::Native.method(name)] }
+      DEVICE_CALLS.each { |name| stub_call(name, returns, calls) }
+      yield
+      calls
+    ensure
+      originals&.each { |name, method| replace(name, method) }
+    end
+
+    def stub_call(name, returns, calls)
+      replace(name) do |*args|
+        calls << [name, args]
+        value = returns.fetch(name) { raise Minitest::Assertion, "unexpected Native.#{name}" }
+        value.is_a?(Proc) ? value.call(*args) : value
+      end
+    end
+
+    # Removes the method first, so Ruby does not warn about redefining it.
+    def replace(name, method = nil, &)
+      IOKit::Native.singleton_class.remove_method(name)
+      method ? IOKit::Native.define_singleton_method(name, method) : IOKit::Native.define_singleton_method(name, &)
+    end
+  end
+
+  # Drives open and the handle's writes and close.
+  class IOKitHandleTest < Minitest::Test
+    include IOKitStubs
+
+    REPORT = ("\x06\x00".b + ("\x01".b * 24)).freeze
 
     OPEN_ERRORS = {
       0xE00002C5 => [Blinkstick::BusyError, "it is in use by another program"],
@@ -133,7 +182,7 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
     end
 
     def test_write_errors_map_and_name_the_serial
-      WRITE_ERRORS.each do |code, expected|
+      TRANSFER_ERRORS.each do |code, expected|
         with_native(hid_device_set_report: code) do
           error = assert_raises(expected) { new_handle.write_feature(REPORT) }
 
@@ -177,11 +226,6 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
 
     private
 
-    # A pointer that is never dereferenced: only stubs ever receive it.
-    def ref
-      @ref ||= FFI::Pointer.new(1)
-    end
-
     # What the stubbed CFRetain hands back, distinct from ref so the tests
     # can tell which reference each call was given.
     def retained
@@ -191,34 +235,73 @@ if RbConfig::CONFIG["host_os"].match?(/darwin/)
     def device
       Blinkstick::Backend::Device.new(id: ref, serial: SERIAL, manufacturer: "", product: "", release: 0x0201)
     end
+  end
 
-    def new_handle
-      IOKit::Handle.new(ref, serial: SERIAL)
+  # Drives Handle#read_feature against a stubbed IOHIDDeviceGetReport.
+  class IOKitReadTest < Minitest::Test
+    include IOKitStubs
+
+    FRAME = ("\x06\x00".b + (1..24).to_a.pack("C*")).freeze
+
+    def test_read_feature_arguments
+      result = nil
+      with_native(hid_device_get_report: answer(FRAME, 26)) { result = new_handle.read_feature(6, 26) }
+
+      assert_equal FRAME, result
+      assert_equal [ref, 2, 6, 26, 6, 26], @seen
     end
 
-    # Replaces every device call on Native for the block and returns the
-    # calls made. A call named in returns gives that value; any other fails.
-    def with_native(returns)
-      calls = []
-      originals = DEVICE_CALLS.to_h { |name| [name, IOKit::Native.method(name)] }
-      DEVICE_CALLS.each { |name| stub_call(name, returns, calls) }
-      yield
-      calls
-    ensure
-      originals&.each { |name, method| replace(name, method) }
-    end
+    def test_read_feature_short_length
+      with_native(hid_device_get_report: answer(FRAME, 10)) do
+        result = new_handle.read_feature(6, 26)
 
-    def stub_call(name, returns, calls)
-      replace(name) do |*args|
-        calls << [name, args]
-        returns.fetch(name) { raise Minitest::Assertion, "unexpected Native.#{name}" }
+        assert_equal FRAME.byteslice(0, 10), result
+        assert_equal Encoding::BINARY, result.encoding
       end
     end
 
-    # Removes the method first, so Ruby does not warn about redefining it.
-    def replace(name, method = nil, &)
-      IOKit::Native.singleton_class.remove_method(name)
-      method ? IOKit::Native.define_singleton_method(name, method) : IOKit::Native.define_singleton_method(name, &)
+    # A length past the buffer (or negative) never reads outside it.
+    def test_read_feature_clamps_the_length
+      with_native(hid_device_get_report: answer(FRAME, 4096)) { assert_equal FRAME, new_handle.read_feature(6, 26) }
+      with_native(hid_device_get_report: answer(FRAME, -1)) { assert_equal "".b, new_handle.read_feature(6, 26) }
+    end
+
+    def test_read_feature_errors_map
+      TRANSFER_ERRORS.each_key do |signed|
+        [signed, signed + SIGNED].each do |code|
+          with_native(hid_device_get_report: code) do
+            error = assert_raises(TRANSFER_ERRORS.fetch(signed)) { new_handle.read_feature(6, 26) }
+
+            assert_equal "#{SERIAL}: reading a report failed (#{IOKit.describe(code)})", error.message
+          end
+        end
+      end
+    end
+
+    def test_read_after_close
+      calls = with_native(hid_device_close: 0, cf_release: nil) do
+        handle = new_handle
+        handle.close
+        error = assert_raises(Blinkstick::ClosedError) { handle.read_feature(6, 26) }
+
+        assert_includes error.message, SERIAL
+      end
+
+      refute_includes calls.map(&:first), :hid_device_get_report
+    end
+
+    private
+
+    # A stubbed IOHIDDeviceGetReport that notes what it was handed, copies
+    # bytes into the buffer, reports length back through the length cell,
+    # then succeeds.
+    def answer(bytes, length)
+      lambda do |device, type, id, buffer, cell|
+        @seen = [device, type, id, buffer.size, buffer.get_uint8(0), cell.read_long]
+        buffer.put_bytes(0, bytes, 0, [bytes.bytesize, buffer.size].min)
+        cell.write_long(length)
+        0
+      end
     end
   end
 end
