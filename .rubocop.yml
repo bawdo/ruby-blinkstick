@@ -6,3 +6,7 @@ AllCops:
   NewCops: enable
 Style/StringLiterals:
   EnforcedStyle: double_quotes
+# The 148 colour names are one data table.
+Metrics/ModuleLength:
+  Exclude:
+    - lib/blinkstick/colour_names.rb
