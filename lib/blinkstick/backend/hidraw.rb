@@ -83,13 +83,17 @@ module Blinkstick
       end
 
       # @return [Array<Device>] every BlinkStick attached, in hidraw order
+      #   (hidraw2 before hidraw10)
       def list
-        Dir.glob(File.join(@sysfs, "class/hidraw/hidraw*")).filter_map { |entry| device_for(entry) }
+        Dir.glob(File.join(@sysfs, "class/hidraw/hidraw*"))
+           .sort_by { |entry| File.basename(entry).delete_prefix("hidraw").to_i }
+           .filter_map { |entry| device_for(entry) }
       end
 
       # @param device [Device] a device from {#list}
       # @return [Handle]
       # @raise [NotFoundError, PermissionError, BusyError] when it cannot be opened
+      # @raise [Error] when opening fails for any other reason
       def open(device)
         Handle.new(File.open(device.id, "r+b"), serial: device.serial)
       rescue SystemCallError => e
@@ -104,7 +108,7 @@ module Blinkstick
         when Errno::ENOENT, Errno::ENODEV then NotFoundError.new("#{where} is no longer attached")
         when Errno::EACCES, Errno::EPERM then PermissionError.new("Permission denied opening #{where}. #{UDEV_HINT}")
         when Errno::EBUSY then BusyError.new("#{where} is in use by another program")
-        else TransferFailed.new("Could not open #{where}: #{error.message}")
+        else Error.new("Could not open #{where}: #{error.message}")
         end
       end
 
@@ -114,15 +118,17 @@ module Blinkstick
         return unless blinkstick?(uevent["HID_ID"])
 
         usb = File.expand_path("../..", hid)
-        Device.new(id: File.join(@dev, File.basename(entry)), serial: uevent.fetch("HID_UNIQ", ""),
+        Device.new(id: File.join(@dev, File.basename(entry)), serial: text(uevent.fetch("HID_UNIQ", "")),
                    manufacturer: attribute(usb, "manufacturer"), product: attribute(usb, "product"),
                    release: attribute(usb, "bcdDevice").to_i(16))
       rescue SystemCallError
         nil
       end
 
+      # Read in binary, so a device name that is not valid in the locale's
+      # encoding (a UTF-8 "®" under LANG=C, say) cannot break parsing.
       def parse_uevent(path)
-        File.readlines(path, chomp: true).to_h { |line| line.split("=", 2).then { |k, v| [k, v.to_s] } }
+        File.readlines(path, chomp: true, mode: "rb").to_h { |line| line.split("=", 2).then { |k, v| [k, v.to_s] } }
       end
 
       # HID_ID is bus:vendor:product in hex.
@@ -132,9 +138,14 @@ module Blinkstick
       end
 
       def attribute(dir, file)
-        File.read(File.join(dir, file)).strip
+        text(File.binread(File.join(dir, file)).strip)
       rescue SystemCallError
         ""
+      end
+
+      # sysfs strings are UTF-8 by convention; invalid bytes become U+FFFD.
+      def text(bytes)
+        bytes.dup.force_encoding(Encoding::UTF_8).scrub
       end
     end
   end
