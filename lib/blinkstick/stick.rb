@@ -14,6 +14,7 @@ module Blinkstick
   # carrying on. Only when that fails does a call raise {DisconnectedError}.
   class Stick
     include Eeprom
+    include Effects
     include Handover
     include Lighting
     include Reconnect
