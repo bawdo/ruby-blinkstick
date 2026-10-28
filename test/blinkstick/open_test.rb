@@ -53,7 +53,7 @@ class OpenTest < Minitest::Test
     assert_raises(Blinkstick::NotFoundError) { Blinkstick.open }
   end
 
-  def test_open_unsupported_model_closes_handle
+  def test_open_unsupported_model_never_opens_it
     backend = install_backend(FakeBackend.new(FakeBackend.unknown, FakeBackend.nano))
 
     [{}, { serial: "BS000003-2.0" }].each do |args|
@@ -61,7 +61,7 @@ class OpenTest < Minitest::Test
 
       assert_includes error.message, "BS000003-2.0"
     end
-    assert backend.handles.all?(&:closed?), "a handle was left open"
+    assert_empty backend.handles
   end
 
   def test_busy

@@ -61,6 +61,19 @@ class StickTest < Minitest::Test
     assert_equal [true, true, 0], [stick.closed?, handle.closed?, handle.attempts]
   end
 
+  # The fake handle raises ClosedError too, but says "fake handle closed",
+  # so the message proves the Stick refused before reaching its handle.
+  def test_closed_stick_refuses_before_reaching_its_handle
+    stick = open_stick(FakeBackend.nano)
+    stick.close
+
+    [-> { stick.colour = :red }, -> { stick.off }].each do |use|
+      error = assert_raises(Blinkstick::ClosedError, &use)
+
+      assert_equal "BS000001-3.0 is closed", error.message
+    end
+  end
+
   def test_new_stick_is_not_closed
     refute_predicate open_stick(FakeBackend.nano), :closed?
   end

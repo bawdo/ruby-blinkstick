@@ -39,6 +39,14 @@ class ColourTest < Minitest::Test
     assert_operator Blinkstick::InvalidColourError, :<=, ArgumentError
   end
 
+  # Bytes that are not valid in the String's encoding must not escape as a
+  # bare ArgumentError or Encoding::CompatibilityError.
+  def test_rejects_invalid_encoding
+    ["\xFFred", "ff\xFF00", "#ff\xFF00", "\xFF,0,0", "red".b + "\xFF".b].each do |input|
+      assert_raises(Blinkstick::InvalidColourError, input.inspect) { Colour.parse(input) }
+    end
+  end
+
   def test_error_message_includes_input
     error = assert_raises(Blinkstick::InvalidColourError) { Colour.parse("notacolour") }
     assert_equal 'invalid colour "notacolour"', error.message

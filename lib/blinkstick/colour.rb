@@ -64,7 +64,11 @@ module Blinkstick
         invalid(array)
       end
 
+      # Bytes that are invalid in the String's encoding are not a colour, and
+      # would otherwise raise from strip or the regexps below.
       def from_string(input)
+        return invalid(input) unless input.valid_encoding?
+
         text = input.strip
         return from_hex(input, text.delete_prefix("#")) if text.start_with?("#")
 
