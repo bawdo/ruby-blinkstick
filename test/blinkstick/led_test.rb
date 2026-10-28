@@ -27,6 +27,7 @@ class LedTest < Minitest::Test
 
     assert_equal [Report.led(3, RED)], handle.writes
     assert_equal({ 5 => 1 }, handle.writes_by_id)
+    assert_empty handle.reads_by_id
   end
 
   def test_assignment_returns_the_colour_argument
