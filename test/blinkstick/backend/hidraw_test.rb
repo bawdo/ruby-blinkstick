@@ -201,6 +201,17 @@ class HidrawReadTest < Minitest::Test
     end
   end
 
+  def test_read_feature_refuses_bad_arguments
+    io = ReadIO.new("".b)
+    handle = Hidraw::Handle.new(io)
+
+    [[6, 0], [256, 26], [-1, 26], [6, -1], [6, "26"], ["6", 26], [nil, 26]].each do |id, size|
+      assert_raises(ArgumentError) { handle.read_feature(id, size) }
+    end
+
+    assert_empty io.calls
+  end
+
   def test_read_after_close
     handle = Hidraw::Handle.new(HidrawTest::FakeIO.new)
     handle.close
