@@ -114,10 +114,16 @@ class HardwareTest < Minitest::Test
     end
 
     def await_ready(seconds)
-      raise "child never printed READY: #{@err}" unless @stdout.wait_readable(seconds)
+      unless @stdout.wait_readable(seconds)
+        @reader.join(5)
+        raise "child never printed READY: #{@err}"
+      end
 
       line = @stdout.gets
-      raise "child sent #{line.inspect} instead of READY: #{@err}" unless line == "READY\n"
+      return if line == "READY\n"
+
+      @reader.join(5)
+      raise "child sent #{line.inspect} instead of READY: #{@err}"
     end
 
     def release
