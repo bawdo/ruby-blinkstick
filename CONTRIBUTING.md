@@ -49,9 +49,10 @@ is theirs.
 2. Once it merges, `git switch main && git pull --ff-only`.
 3. `git tag -s vx.y.z -m "Released x.y.z"`, then `git push origin vx.y.z`.
 
-The release workflow refuses a tag that does not match `Blinkstick::VERSION` or
-has no CHANGELOG section, and builds, publishes and creates the GitHub release
-itself.
+Check the new section has entries before tagging: the release workflow refuses
+a tag that does not match `Blinkstick::VERSION`, or whose CHANGELOG section is
+missing or empty, and tags cannot be moved or reused once pushed. Everything
+else (build, publish, GitHub release) the workflow does itself.
 
 ## Licence
 
