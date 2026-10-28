@@ -8,10 +8,15 @@ module Blinkstick
   # stick (nothing is cached). A stick that is garbage collected without
   # {#close} still releases its OS handle, but call {#close} (or use the
   # block form of {Blinkstick.open}) rather than relying on that.
+  #
+  # A stick that is unplugged and plugged back in is found again by its
+  # serial on the next call, which repaints the last frame written before
+  # carrying on. Only when that fails does a call raise {DisconnectedError}.
   class Stick
     include Eeprom
     include Handover
     include Lighting
+    include Reconnect
 
     # @return [Info] the identity of this stick
     attr_reader :info
@@ -19,9 +24,13 @@ module Blinkstick
     # @api private
     # @param handle [#write_feature, #read_feature, #close] an open backend handle
     # @param info [Info]
-    def initialize(handle, info)
+    # @param reopen [#call, nil] returns a fresh handle for this stick or
+    #   raises an {Error}; nil means the stick never reconnects
+    def initialize(handle, info, reopen: nil)
       @handle = handle
       @info = info
+      @reopen = reopen
+      @reconnected = false
       @mutex = Mutex.new
       @closed = false
       @limit = 255
@@ -51,7 +60,7 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def colour=(colour)
       write_frame([Colour.parse(colour)] * info.model.leds)
     end
@@ -66,7 +75,7 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def []=(index, colour)
       check_index(index)
       write_led(index, Colour.parse(colour))
@@ -82,7 +91,7 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def frame=(colours)
       list = Array.try_convert(colours)
       raise TypeError, "frame must be an Array of colours, got #{colours.class}" if list.nil?
@@ -102,7 +111,7 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def mode
       Report.decode_mode(read(Report::MODE_ID, Report::MODE_SIZE))
     end
@@ -115,7 +124,7 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def info_block(number)
       Report.decode_info_block(read(Report.info_block_id(number), Report::INFO_BLOCK_SIZE))
     end
@@ -126,13 +135,14 @@ module Blinkstick
     # @raise [ClosedError] after {#close}
     # @raise [BusyError] when another program holds the stick mid-transfer
     # @raise [PermissionError] when the system refuses access mid-transfer
-    # @raise [DisconnectedError] when the stick stops responding
+    # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
     def off
       self.colour = Colour::OFF
       nil
     end
 
-    # Releases the stick. Calling it again does nothing.
+    # Releases the stick. Calling it again does nothing, and neither does
+    # calling it on a stick that was unplugged and not found again.
     #
     # @return [void]
     def close
@@ -141,7 +151,7 @@ module Blinkstick
 
         @closed = true
         ObjectSpace.undefine_finalizer(self)
-        @handle.close
+        @handle&.close
       end
       nil
     end
@@ -183,35 +193,6 @@ module Blinkstick
       end
 
       reply
-    end
-
-    # Holds the lock across every attempt, so transfers from other threads
-    # cannot land in between.
-    def transfer(what, &)
-      locked { with_retries(what, &) }
-    end
-
-    # Holds the lock, refusing a closed stick.
-    def locked
-      @mutex.synchronize do
-        raise ClosedError, "#{info.serial} is closed" if @closed
-
-        yield
-      end
-    end
-
-    # Runs the block up to Backend::ATTEMPTS times while it raises
-    # TransferFailed. The caller must hold the lock.
-    def with_retries(what)
-      attempt = 0
-      begin
-        attempt += 1
-        yield
-      rescue Backend::TransferFailed
-        retry if attempt < Backend::ATTEMPTS
-
-        raise DisconnectedError, "#{info.serial} stopped responding: #{attempt} #{what} failed in a row"
-      end
     end
   end
 end

@@ -19,7 +19,8 @@ module Blinkstick
   # Raised when using a device after it has been closed.
   class ClosedError < Error; end
 
-  # Raised when the stick is unplugged or stops responding mid-use.
+  # Raised when the stick is unplugged or stops responding mid-use and
+  # reconnecting to it (by its serial) fails or cannot be tried.
   class DisconnectedError < Error; end
 
   # Raised when more than one attached stick has the requested name.

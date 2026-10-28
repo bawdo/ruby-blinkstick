@@ -48,7 +48,7 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def frame
         transfer("reads") { flipped_frame }
       end
@@ -61,7 +61,7 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def [](index)
         check_index(index)
         frame.fetch(index)
@@ -75,7 +75,7 @@ module Blinkstick
       # @param colours [Array<Colour>] one per LED of the model
       # @param scale [Boolean] false to skip the brightness limit
       def write_frame(colours, scale: true)
-        transfer("writes") do
+        transfer("writes", frame_write: true) do
           limited = scale ? colours.map { |colour| scaled(colour) } : colours.dup
           @handle.write_feature(Report.frame(limited.map { |colour| flipped(colour) }))
           @last = limited.freeze
@@ -86,9 +86,9 @@ module Blinkstick
       # nothing has been written yet. One lock hold covers both.
       def write_led(index, colour)
         locked do
-          @last ||= with_retries("reads") { flipped_frame }
+          @last ||= with_reconnect("reads") { flipped_frame }
           limited = scaled(colour)
-          with_retries("writes") { @handle.write_feature(Report.led(index, flipped(limited))) }
+          with_reconnect("writes") { @handle.write_feature(Report.led(index, flipped(limited))) }
           @last = @last.dup.tap { |frame| frame[index] = limited }.freeze
         end
       end

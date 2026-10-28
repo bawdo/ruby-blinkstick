@@ -21,7 +21,7 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def write_info_block(number, bytes)
         data = String.try_convert(bytes)
         raise TypeError, "info block data must be a String, got #{bytes.class}" if data.nil?
@@ -39,7 +39,7 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def name
         info_block(1).dup.force_encoding(Encoding::UTF_8).freeze
       end
@@ -54,7 +54,7 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def name=(name)
         raise TypeError, "name must be a String, got #{name.class}" unless name.is_a?(String)
 
@@ -75,14 +75,12 @@ module Blinkstick
       # @raise [ClosedError] after {#close}
       # @raise [BusyError] when another program holds the stick mid-transfer
       # @raise [PermissionError] when the system refuses access mid-transfer
-      # @raise [DisconnectedError] when the stick stops responding
+      # @raise [DisconnectedError] when the stick stops responding and reconnecting to it fails
       def mode=(mode)
         byte = settable_mode(mode)
-        @mutex.synchronize do
-          raise ClosedError, "#{info.serial} is closed" if @closed
-
-          current = with_retries("reads") { fetch(Report::MODE_ID, Report::MODE_SIZE) }
-          with_retries("writes") { @handle.write_feature(Report.mode(byte)) } unless current.getbyte(1) == byte
+        locked do
+          current = with_reconnect("reads") { fetch(Report::MODE_ID, Report::MODE_SIZE) }
+          with_reconnect("writes") { @handle.write_feature(Report.mode(byte)) } unless current.getbyte(1) == byte
         end
         mode
       end

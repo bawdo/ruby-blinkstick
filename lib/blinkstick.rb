@@ -8,6 +8,7 @@ require_relative "blinkstick/report"
 require_relative "blinkstick/stick/eeprom"
 require_relative "blinkstick/stick/handover"
 require_relative "blinkstick/stick/lighting"
+require_relative "blinkstick/stick/reconnect"
 require_relative "blinkstick/stick"
 require_relative "blinkstick/names"
 
@@ -81,10 +82,27 @@ module Blinkstick
   end
 
   # The one place a Stick for a user is built, however it was found. Opens
-  # the device unless the caller already holds an open handle for it.
+  # the device unless the caller already holds an open handle for it, and
+  # gives the Stick a way to find the device again after an unplug.
   def self.build_stick(backend, device, handle = nil)
     info = supported_info(device)
-    Stick.new(handle || backend.open(device), info)
+    Stick.new(handle || backend.open(device), info, reopen: reopener(device.serial))
+  end
+
+  # A callable that relists through the current backend and opens the one
+  # stick with this serial. An empty serial, or one more than one stick
+  # shares, could reopen the wrong stick, so those never reconnect.
+  def self.reopener(serial)
+    return -> { raise DisconnectedError, "this stick has no serial, so it cannot be found again" } if serial.empty?
+
+    lambda do
+      backend = Backend.current
+      matches = backend.list.select { |device| device.serial == serial }
+      raise NotFoundError, "no BlinkStick with serial #{serial}" if matches.empty?
+      raise DisconnectedError, "serial #{serial} is ambiguous: #{matches.size} sticks have it" if matches.size > 1
+
+      backend.open(matches.first)
+    end
   end
 
   # The model check, made before anything is opened.
@@ -105,5 +123,5 @@ module Blinkstick
               release: device.release)
   end
 
-  private_class_method :open_stick, :build_stick, :supported_info, :find, :info_for
+  private_class_method :open_stick, :build_stick, :reopener, :supported_info, :find, :info_for
 end

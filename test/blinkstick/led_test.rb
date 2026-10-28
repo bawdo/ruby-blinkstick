@@ -84,12 +84,14 @@ class LedTest < Minitest::Test
     assert_equal 4, handle.attempts, "one seeding read, then the write on its third attempt"
   end
 
+  # The reopened handle fails too, so its repaint does: neither handle's
+  # LEDs change.
   def test_failed_writes_leave_leds_untouched
     stick = open_stick(FakeBackend.nano, fail_writes: 3)
+    @backend.next_open("BS000001-3.0", fail_writes: 3)
 
     assert_raises(Blinkstick::DisconnectedError) { stick[0] = :red }
-    assert_equal [Colour::OFF] * 8, handle.leds
-    assert_empty handle.writes
+    assert_equal([[[Colour::OFF] * 8, []]] * 2, @backend.handles.map { |h| [h.leds, h.writes] })
   end
 
   def test_concurrent_led_and_frame_writers_never_interleave

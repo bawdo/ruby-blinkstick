@@ -111,40 +111,48 @@ end
 class ReadFailureTest < Minitest::Test
   include ReadTestHelpers
 
+  # Two failures are retried; three reopen the stick, repaint the frame and
+  # read it from the new handle.
   def test_reads_retry_transient_failures
-    assert_equal FRAME, frame_after(fail_reads: 2)
-    assert_equal 4, handle.attempts
-    assert_raises(Blinkstick::DisconnectedError) { frame_after(fail_reads: 3) }
+    assert_equal [FRAME, 4], [frame_after(fail_reads: 2), handle.attempts]
+    assert_equal FRAME, frame_after(fail_reads: 3)
+    assert_equal [Report.frame(FRAME)], @backend.handles.last.writes
   end
 
   def test_failed_reads_name_the_serial
     stick = open_square(fail_reads: 3)
+    @backend.next_open(SERIAL, fail_reads: 3)
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
 
     assert_includes error.message, SERIAL
-    assert_equal [Blinkstick::Backend::TransferFailed, 3], [error.cause.class, handle.attempts]
+    assert_equal [Blinkstick::Backend::TransferFailed, [3, 3]], [error.cause.class, @backend.handles.map(&:attempts)]
   end
 
   def test_short_and_wrong_id_reads_retry_then_disconnect
     %i[short_reads wrong_id_reads].each do |switch|
-      assert_equal FRAME, frame_after(switch => 2), switch.to_s
-      error = assert_raises(Blinkstick::DisconnectedError, switch.to_s) { frame_after(switch => 3) }
+      assert_equal [FRAME, FRAME], [frame_after(switch => 2), frame_after(switch => 3)], switch.to_s
+      error = assert_raises(Blinkstick::DisconnectedError, switch.to_s) { frame_after(switch => 3, again: true) }
       assert_includes error.message, SERIAL
     end
   end
 
   def test_bad_replies_are_never_counted_as_reads
-    assert_raises(Blinkstick::DisconnectedError) { open_square(short_reads: 3).info_block(1) }
-    assert_equal 3, handle.attempts
-    assert_empty handle.reads_by_id
+    stick = open_square(short_reads: 3)
+    @backend.next_open(SERIAL, short_reads: 3)
+
+    assert_raises(Blinkstick::DisconnectedError) { stick.info_block(1) }
+    assert_equal([[3, {}], [3, {}]], @backend.handles.map { |h| [h.attempts, h.reads_by_id] })
   end
 
+  # A handle that reports the stick gone is not retried, and an unplugged
+  # stick cannot be reopened.
   def test_reads_from_a_gone_stick_are_not_retried
     stick = open_square(gone: true)
+    @backend.unplug(SERIAL)
 
     assert_raises(Blinkstick::DisconnectedError) { stick.mode }
-    assert_equal 1, handle.attempts
+    assert_equal [1, 1], [@backend.handles.size, handle.attempts]
   end
 
   def test_reads_after_close
@@ -167,8 +175,11 @@ class ReadFailureTest < Minitest::Test
 
   private
 
-  def frame_after(**)
-    stick = open_square(**)
+  # Writes FRAME and reads it back. With again: true the reopened handle
+  # gets the same switches, so the read fails after reconnecting too.
+  def frame_after(again: false, **switches)
+    stick = open_square(**switches)
+    @backend.next_open(SERIAL, **switches) if again
     stick.frame = FRAME
     stick.frame
   end
