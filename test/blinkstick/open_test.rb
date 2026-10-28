@@ -51,7 +51,7 @@ class OpenTest < Minitest::Test
 
     error = assert_raises(Blinkstick::NotFoundError) { Blinkstick.open(serial: "BS999999-3.0") }
 
-    assert_includes error.message, "BS999999-3.0"
+    assert_equal 'no BlinkStick with serial "BS999999-3.0"', error.message
   end
 
   def test_open_none_attached

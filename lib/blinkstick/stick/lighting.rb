@@ -5,6 +5,8 @@ module Blinkstick
     # The LED write path of a {Stick}: the brightness limit, inverse, and the
     # last frame written (which a reconnect repaints). All state is guarded by
     # the Stick's lock.
+    #
+    # @api private
     module Lighting
       # @return [Integer] the brightness limit, 0 to 255 (255 by default)
       def brightness_limit
@@ -93,18 +95,18 @@ module Blinkstick
         end
       end
 
-      # @return [Array<Colour>, nil] the last frame written, scaled and not
-      #   flipped, or nil when nothing has been written
-      def last_frame
-        @mutex.synchronize { @last }
-      end
-
       # One read of the frame, flipped back if inverse. The caller holds the lock.
       def flipped_frame
         frame = Report.decode_frame(fetch(Report::FRAME_ID, Report::FRAME_SIZE), info.model.leds)
         @inverse ? frame.map(&:inverse).freeze : frame
       end
 
+      # Applies the brightness limit, for a caller that does not hold the lock.
+      def brightness_scaled(colour)
+        @mutex.synchronize { scaled(colour) }
+      end
+
+      # Applies the brightness limit. The caller holds the lock.
       def scaled(colour)
         return colour if @limit == 255
 

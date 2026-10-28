@@ -11,6 +11,12 @@ module Blinkstick
   #   cancel = Blinkstick::Cancellation.new
   #   Thread.new { sleep 10; cancel.cancel }
   class Cancellation
+    # The longest single condition wait, in seconds. ConditionVariable#wait
+    # raises RangeError for very long timeouts, so a longer pause is made of
+    # several waits (the loop works out what remains each time).
+    LONGEST_WAIT = 86_400
+    private_constant :LONGEST_WAIT
+
     def initialize
       @mutex = Mutex.new
       @condition = ConditionVariable.new
@@ -47,7 +53,7 @@ module Blinkstick
           remaining = deadline - now
           break if remaining <= 0
 
-          @condition.wait(@mutex, remaining)
+          @condition.wait(@mutex, [remaining, LONGEST_WAIT].min)
         end
         @cancelled
       end

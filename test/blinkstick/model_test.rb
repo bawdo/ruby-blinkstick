@@ -29,6 +29,25 @@ class ModelTest < Minitest::Test
     assert_equal 0x0202, info.release
   end
 
+  # 0.2.0 built Info positionally as serial, version, manufacturer, product,
+  # model; release comes after those.
+  def test_info_positional_order_keeps_0_2_0_members_first
+    info = Info.new("BS072777-3.0", "3.0", "m", "p", Model::NANO, 0x0202)
+
+    assert_equal ["BS072777-3.0", "3.0", "m", "p", Model::NANO, 0x0202],
+                 [info.serial, info.version, info.manufacturer, info.product, info.model, info.release]
+  end
+
+  # 0.2.0 code built Info from five members; release defaults to nil.
+  def test_info_from_the_0_2_0_members_alone
+    positional = Info.new("BS072777-3.0", "3.0", "m", "p", Model::NANO)
+    keywords = Info.new(serial: "BS072777-3.0", version: "3.0", manufacturer: "m", product: "p",
+                        model: Model::NANO)
+
+    assert_equal [Model::NANO, nil], [positional.model, positional.release]
+    assert_equal positional, keywords
+  end
+
   def test_info_copies_strings
     info = Info.from(serial: "BS072777-3.0", manufacturer: "Agile Innovative Ltd",
                      product: "BlinkStick Nano", release: 0x0202)

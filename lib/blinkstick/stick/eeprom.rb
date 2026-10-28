@@ -5,10 +5,13 @@ module Blinkstick
     # The parts of a {Stick} that write the stick's EEPROM: its name, its
     # user data blocks and its LED mode. EEPROM wears with every write, so
     # none of these belongs in a loop.
+    #
+    # @api private
     module Eeprom
       # Modes this gem will set, by the byte the stick stores. The BlinkStick
       # Pro modes (0 and 1) are refused.
       SETTABLE_MODES = { ws2812: 2, ws2812_mirror: 3 }.freeze
+      private_constant :SETTABLE_MODES
 
       # Writes a user data block, padded with NULs to 32 bytes. This writes
       # EEPROM, which wears with use, so do not call it in a loop.

@@ -83,28 +83,38 @@ module Blinkstick
     build_stick(backend, find(backend.list, serial))
   end
 
-  # The one place a Stick for a user is built, however it was found. Opens
-  # the device unless the caller already holds an open handle for it, and
-  # gives the Stick a way to find the device again after an unplug.
-  def self.build_stick(backend, device, handle = nil)
+  # The one place a Stick for a user is built, however it was found. Checks
+  # the model first, then takes the handle from the block (when the caller
+  # already holds one open) or opens the device, and gives the Stick a way
+  # to find the device again after an unplug.
+  def self.build_stick(backend, device)
     info = supported_info(device)
-    Stick.new(handle || backend.open(device), info, reopen: reopener(device.serial))
+    handle = block_given? ? yield : backend.open(device)
+    Stick.new(handle, info, reopen: reopener(device.serial))
   end
 
   # A callable that relists through the current backend and opens the one
-  # stick with this serial. An empty serial, or one more than one stick
-  # shares, could reopen the wrong stick, so those never reconnect.
+  # stick with this serial, after the same model check {Blinkstick.open} makes. An
+  # empty serial, or one more than one stick shares, could reopen the wrong
+  # stick, so those never reconnect.
   def self.reopener(serial)
     return -> { raise DisconnectedError, "this stick has no serial, so it cannot be found again" } if serial.empty?
 
     lambda do
       backend = Backend.current
-      matches = backend.list.select { |device| device.serial == serial }
-      raise NotFoundError, "no BlinkStick with serial #{serial}" if matches.empty?
-      raise DisconnectedError, "serial #{serial} is ambiguous: #{matches.size} sticks have it" if matches.size > 1
-
-      backend.open(matches.first)
+      device = only_device(backend.list, serial)
+      supported_info(device)
+      backend.open(device)
     end
+  end
+
+  # The one device with this serial, for {reopener}.
+  def self.only_device(devices, serial)
+    matches = devices.select { |device| device.serial == serial }
+    raise NotFoundError, "no BlinkStick with serial #{serial.inspect}" if matches.empty?
+    raise DisconnectedError, "serial #{serial.inspect} is ambiguous: #{matches.size} sticks have it" if matches.size > 1
+
+    matches.first
   end
 
   # The model check, made before anything is opened.
@@ -117,7 +127,8 @@ module Blinkstick
   def self.find(devices, serial)
     return devices.first || raise(NotFoundError, "no BlinkStick attached") if serial.nil?
 
-    devices.find { |device| device.serial == serial } || raise(NotFoundError, "no BlinkStick with serial #{serial}")
+    devices.find { |device| device.serial == serial } ||
+      raise(NotFoundError, "no BlinkStick with serial #{serial.inspect}")
   end
 
   def self.info_for(device)
@@ -125,5 +136,5 @@ module Blinkstick
               release: device.release)
   end
 
-  private_class_method :open_stick, :build_stick, :reopener, :supported_info, :find, :info_for
+  private_class_method :open_stick, :build_stick, :reopener, :only_device, :supported_info, :find, :info_for
 end

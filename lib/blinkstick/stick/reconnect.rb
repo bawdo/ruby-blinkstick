@@ -8,6 +8,8 @@ module Blinkstick
     # runs out of attempts or the handle says the stick is gone, the handle is
     # dropped, the stick reopened by serial, the last frame repainted and the
     # transfer run again. Everything here runs under the Stick's lock.
+    #
+    # @api private
     module Reconnect
       private
 
@@ -38,7 +40,7 @@ module Blinkstick
         rescue Backend::TransferFailed
           retry if attempt < Backend::ATTEMPTS
 
-          raise DisconnectedError, "#{info.serial} stopped responding: #{attempt} #{what} failed in a row"
+          raise DisconnectedError, "#{info.serial.inspect} stopped responding: #{attempt} #{what} failed in a row"
         end
       end
 
@@ -76,16 +78,20 @@ module Blinkstick
         repaint_last if repaint && @last
       end
 
+      # The reopen's own message already names the serial (or says there is
+      # none), so it is not repeated here.
+      #
       # @return [#write_feature, #read_feature, #close] a fresh handle
       # @raise [DisconnectedError] wrapping whatever stopped the reopen
       def reopen_handle
         @reopen.call
       rescue Error => e
-        raise DisconnectedError, "#{info.serial} could not be reopened: #{e.message}"
+        raise DisconnectedError, "could not reconnect: #{e.message}"
       end
 
       # Sends the last frame again exactly as it was sent: already limited,
-      # so not limited again, and flipped if inverse is on.
+      # so not limited again, and flipped if inverse is on. The failure's own
+      # message names the stick, so the serial is not repeated here.
       #
       # @raise [DisconnectedError] wrapping the failure, with the handle dropped
       def repaint_last
@@ -93,7 +99,7 @@ module Blinkstick
         with_retries("writes") { @handle.write_feature(report) }
       rescue Error => e
         drop_handle
-        raise DisconnectedError, "#{info.serial} was reopened but the repaint failed: #{e.message}"
+        raise DisconnectedError, "reconnected, but repainting the last frame failed: #{e.message}"
       end
 
       # Takes a new handle, moving the finaliser onto it.

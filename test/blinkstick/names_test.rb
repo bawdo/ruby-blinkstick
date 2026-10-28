@@ -32,7 +32,7 @@ class NamesTest < Minitest::Test
 
     error = assert_raises(Blinkstick::NotFoundError) { Blinkstick.open(name: "lamp") }
 
-    assert_match(/lamp.*BS000002-3\.1.*busy/i, error.message)
+    assert_match(/lamp.*"BS000002-3\.1" \(BusyError: .*refused/, error.message)
     refute_includes error.message, "BS000001-3.0"
   end
 
@@ -48,7 +48,7 @@ class NamesTest < Minitest::Test
 
     error = assert_raises(Blinkstick::DuplicateNameError) { Blinkstick.open(name: "desk") }
 
-    assert_includes error.message, "BS000001-3.0, BS000002-3.1"
+    assert_includes error.message, '"BS000001-3.0", "BS000002-3.1"'
     assert_equal [true, true, true], closed_states(backend)
   end
 

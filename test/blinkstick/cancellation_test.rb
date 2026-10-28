@@ -46,6 +46,19 @@ class CancellationTest < Minitest::Test
     canceller&.join
   end
 
+  # ConditionVariable#wait raises RangeError past about 1e18 seconds, so a
+  # huge but finite wait must still be woken by a cancel.
+  def test_huge_wait_is_woken_by_cancel
+    canceller = Thread.new do
+      sleep 0.05
+      @token.cancel
+    end
+
+    assert @token.wait(1e19)
+  ensure
+    canceller&.join
+  end
+
   def test_cancel_wakes_every_waiter
     waiters = Array.new(3) { Thread.new { @token.wait(5) } }
     sleep 0.05

@@ -68,8 +68,7 @@ module Blinkstick
       begin
         backend.list.each { |device| readings << try_keep(backend, device) }
         match = single_match(name, readings)
-        supported_info(match.device)
-        build_stick(backend, match.device, match.stick.detach)
+        build_stick(backend, match.device) { match.stick.detach }
       ensure
         readings.each { |reading| reading.stick&.close }
       end
@@ -101,13 +100,13 @@ module Blinkstick
 
     def duplicate_name(name, matches)
       DuplicateNameError.new("#{matches.size} sticks are named #{name.inspect}: " \
-                             "#{matches.map(&:serial).join(', ')}")
+                             "#{matches.map { |device| device.serial.inspect }.join(', ')}")
     end
 
     def not_found_name(name, readings)
       skipped = readings.filter_map do |reading|
         error = reading.error
-        "#{reading.device.serial} (#{error.class.name.split('::').last}: #{error.message})" if error
+        "#{reading.device.serial.inspect} (#{error.class.name.split('::').last}: #{error.message})" if error
       end
       message = "no BlinkStick named #{name.inspect}"
       message += "; skipped #{skipped.join(', ')}" unless skipped.empty?

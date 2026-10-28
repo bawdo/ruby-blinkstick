@@ -116,7 +116,7 @@ class ReconnectTest < Minitest::Test
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
 
-    assert_includes error.message, SERIAL
+    assert_equal %(could not reconnect: no BlinkStick with serial "#{SERIAL}"), error.message
     @backend.replug(SERIAL)
 
     assert_equal [:ws2812, 2, [Report.frame(FRAME)]], [stick.mode, handles.size, handles.last.writes]
@@ -199,8 +199,9 @@ class ReconnectFailureTest < Minitest::Test
     stick = replug_with_failing_repaint
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
+    cause = %("#{SERIAL}" stopped responding: 3 writes failed in a row)
 
-    assert_includes error.message, "repaint"
+    assert_equal "reconnected, but repainting the last frame failed: #{cause}", error.message
     assert_predicate handles.last, :closed?
   end
 
@@ -229,7 +230,7 @@ class ReconnectFailureTest < Minitest::Test
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
 
-    assert_includes error.message, "has no serial, so it cannot be found again"
+    assert_equal "could not reconnect: this stick has no serial, so it cannot be found again", error.message
     assert_equal [1, 1], [@backend.handles_for("").size, handles.size]
   end
 
@@ -239,7 +240,19 @@ class ReconnectFailureTest < Minitest::Test
 
     error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
 
-    assert_includes error.message, "ambiguous"
+    assert_includes error.message, %(serial "#{SERIAL}" is ambiguous: 2 sticks have it)
+    assert_equal 1, handles.size
+  end
+
+  # The serial relists as a model the gem refuses, so it is never opened.
+  def test_reconnect_refuses_an_unknown_model
+    stick = open_square
+    unplug_and_replug
+    @backend.define_singleton_method(:list) { [FakeBackend.unknown(SERIAL)] }
+
+    error = assert_raises(Blinkstick::DisconnectedError) { stick.mode }
+
+    assert_instance_of Blinkstick::UnsupportedModelError, error.cause
     assert_equal 1, handles.size
   end
 

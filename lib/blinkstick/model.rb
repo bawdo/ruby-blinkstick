@@ -33,7 +33,15 @@ module Blinkstick
   private_constant :MODELS
 
   # Identifies an attached BlinkStick. It holds no OS path or handle.
-  Info = Data.define(:serial, :version, :manufacturer, :product, :release, :model) do
+  # +release+ comes last and defaults to nil, so 0.2.0 code that builds an
+  # Info from its five members, by position or keyword, still works.
+  Info = Data.define(:serial, :version, :manufacturer, :product, :model, :release) do
+    # Data checks the other members (serial, version, manufacturer, product
+    # and model) as usual.
+    #
+    # @param release [Integer, nil] the USB bcdDevice value, nil when not known
+    def initialize(release: nil, **) = super
+
     # @param serial [String] for example "BS072777-3.0"
     # @param manufacturer [String]
     # @param product [String]
@@ -43,7 +51,7 @@ module Blinkstick
       _, _, version = serial.partition("-")
       major, = version.split(".", 2)
       new(serial: serial, version: version, manufacturer: manufacturer, product: product,
-          release: release, model: MODELS.fetch([major, release], Model::UNKNOWN))
+          model: MODELS.fetch([major, release], Model::UNKNOWN), release: release)
     end
   end
 end

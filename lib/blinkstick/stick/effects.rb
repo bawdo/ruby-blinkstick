@@ -10,9 +10,15 @@ module Blinkstick
     # Two effects running on one stick at once interleave their frames; that
     # is documented, not prevented. A cancelled effect returns false and
     # leaves the LEDs as they are.
+    #
+    # @api private
     module Effects
       # Seconds between morph steps.
       STEP = 0.02
+
+      # STEP in integer nanoseconds, for counting steps as Go does.
+      STEP_NS = (STEP * 1_000_000_000).round
+      private_constant :STEP, :STEP_NS
 
       # Flashes every LED on and off, ending off.
       #
@@ -95,7 +101,7 @@ module Blinkstick
         from = frame
         to = brightness_scaled(target)
         # Integer nanoseconds as Go does: 0.58 s is 29 steps, where float division gives 28.
-        steps = [(duration * 1_000_000_000).round / 20_000_000, 1].max
+        steps = [(duration * 1_000_000_000).round / STEP_NS, 1].max
         (1..steps).all? do |step|
           next false if cancel.cancelled?
 
@@ -104,9 +110,9 @@ module Blinkstick
         end
       end
 
-      # Runs one write then pauses; falsy when cancelled before the write or
-      # during the pause. A pause of 0 is skipped. Truthy means keep going: nil
-      # when cancelled before the write, false when the pause was cancelled.
+      # Runs one write then pauses (a pause of 0 is skipped). Returns truthy
+      # to keep going; nil when cancelled before the write, false when the
+      # pause was cancelled.
       def beat(cancel, seconds)
         return if cancel.cancelled?
 
@@ -114,19 +120,18 @@ module Blinkstick
         !(seconds.positive? && cancel.wait(seconds))
       end
 
-      def brightness_scaled(colour)
-        @mutex.synchronize { scaled(colour) }
+      # The colour step/steps of the way from one colour to another.
+      def lerp(from, target, step, steps)
+        Colour.new(red: towards(from.red, target.red, step, steps),
+                   green: towards(from.green, target.green, step, steps),
+                   blue: towards(from.blue, target.blue, step, steps))
       end
 
-      # One channel at a time: a + (b - a) * step / steps, truncating toward
-      # zero as Go does (Integer#/ would floor).
-      def lerp(from, target, step, steps)
-        channels = %i[red green blue].to_h do |channel|
-          a = from.public_send(channel)
-          delta = (target.public_send(channel) - a) * step
-          [channel, a + (delta.negative? ? -(-delta / steps) : delta / steps)]
-        end
-        Colour.new(**channels)
+      # One channel: a + (b - a) * step / steps, truncating toward zero as Go
+      # does (Integer#/ would floor).
+      def towards(from, target, step, steps)
+        delta = (target - from) * step
+        from + (delta.negative? ? -(-delta / steps) : delta / steps)
       end
 
       def check_time(name, seconds, positive:)
