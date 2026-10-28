@@ -59,6 +59,30 @@ module HardwareSupport
     stick.close
   end
 
+  # Opens each supported stick in turn, yielding it, and puts it away
+  # afterwards. Inverse and the brightness limit are reset first, so the
+  # final off is sent as plain zeros, not flipped to full white.
+  def each_stick
+    sticks = supported_sticks
+    skip "no supported BlinkStick attached" if sticks.empty?
+
+    sticks.each do |info|
+      stick = Blinkstick.open(serial: info.serial)
+      begin
+        yield stick
+      ensure
+        reset_and_put_away(stick)
+      end
+    end
+  end
+
+  def reset_and_put_away(stick)
+    stick.inverse = false
+    stick.brightness_limit = 255
+  ensure
+    turn_off_and_close(stick)
+  end
+
   # A Ruby process holding a stick open. Stdout and stderr stay separate, and
   # every wait has a timeout so a hung child cannot hang rake.
   class Child
@@ -232,22 +256,6 @@ class HardwareLedTest < Minitest::Test
 
   private
 
-  # Opens each supported stick in turn, yielding it, and turns it off and
-  # closes it afterwards.
-  def each_stick
-    sticks = supported_sticks
-    skip "no supported BlinkStick attached" if sticks.empty?
-
-    sticks.each do |info|
-      stick = Blinkstick.open(serial: info.serial)
-      begin
-        yield stick
-      ensure
-        turn_off_and_close(stick)
-      end
-    end
-  end
-
   def assert_only_led_changed(stick, base, index)
     red = Blinkstick::Colour.parse(:red)
     stick.frame = base
@@ -269,14 +277,131 @@ class HardwareLedTest < Minitest::Test
     assert_predicate status, :success?, "child failed (shared read of #{serial}): #{err}"
   ensure
     child&.kill
+    switch_off(serial)
   end
 
-  def read_while_child_holds(serial, names)
+  # Releases the child and puts the parent's own handle away on every path,
+  # turning the stick off before closing it.
+  def read_while_child_holds(serial, names, &)
     stick = Blinkstick.open(serial: serial)
 
     assert_equal names.map { |name| Blinkstick::Colour.parse(name) }, stick.frame, "shared read of #{serial}"
   ensure
+    release_and_put_away(stick, &)
+  end
+
+  def release_and_put_away(stick)
     yield
-    stick&.close
+  ensure
+    turn_off_and_close(stick) if stick
+  end
+
+  # A last resort after a failed or killed child, which may have left the
+  # stick lit. Best effort: it must not hide the failure that got us here.
+  def switch_off(serial)
+    Blinkstick.open(serial: serial, &:off)
+  rescue Blinkstick::Error
+    nil
+  end
+end
+
+# The 0.3.0 features against a real stick: brightness limit, inverse,
+# effects, names in the listing and the USB release. Colours only: reports
+# 2, 3 and 4 (name, info blocks, mode) are never written.
+class HardwareFeatureTest < Minitest::Test
+  include HardwareSupport
+
+  BLACK = Blinkstick::Colour.parse(:black)
+
+  def setup
+    return if ENV["BLINKSTICK_HARDWARE"] == "1"
+
+    skip "set BLINKSTICK_HARDWARE=1 (or run `rake hardware`) to drive real sticks"
+  end
+
+  def test_brightness_limit_reads_back_scaled
+    each_stick do |stick|
+      stick.brightness_limit = 128
+      stick.colour = :white
+
+      assert_equal [Blinkstick::Colour.new(red: 128, green: 128, blue: 128)] * leds(stick), stick.frame
+    end
+  end
+
+  def test_inverse_reads_back_as_written
+    each_stick do |stick|
+      colours = PALETTE.take(leds(stick)).map { |name| Blinkstick::Colour.parse(name) }
+      stick.inverse = true
+      stick.frame = colours
+
+      assert_equal colours, stick.frame
+      assert_equal colours.map(&:inverse), plain_frame(stick.info.serial), "a plain Stick reads the flipped bytes"
+    end
+  end
+
+  def test_morph_ends_on_colour
+    each_stick do |stick|
+      assert stick.morph(:blue, duration: 0.2)
+      assert_equal [Blinkstick::Colour.parse(:blue)] * leds(stick), stick.frame
+    end
+  end
+
+  def test_blink_and_pulse_end_off
+    each_stick do |stick|
+      assert_ends_off(stick) { stick.blink(:red, period: 0.2, repeats: 2) }
+      assert_ends_off(stick) { stick.pulse(:green, duration: 0.3) }
+    end
+  end
+
+  def test_pre_cancelled_effect_changes_nothing
+    each_stick do |stick|
+      cancel = Blinkstick::Cancellation.new
+      cancel.cancel
+      stick.colour = :blue
+      before = stick.frame
+
+      assert_equal [false] * 3, cancelled_effects(stick, cancel)
+      assert_equal before, stick.frame
+    end
+  end
+
+  def test_list_with_names
+    plain = Blinkstick.list.map(&:serial)
+    named = Blinkstick.list(names: true)
+
+    assert_equal plain.sort, named.map { |entry| entry.info.serial }.sort
+    named.each { |entry| assert_kind_of Blinkstick::NamedInfo, entry }
+  end
+
+  def test_release_matches_model
+    releases = { Blinkstick::Model::NANO => 0x0202, Blinkstick::Model::SQUARE => 0x0201 }
+    sticks = supported_sticks
+    skip "no supported BlinkStick attached" if sticks.empty?
+
+    sticks.each { |info| assert_equal releases.fetch(info.model), info.release, "release of #{info.serial}" }
+  end
+
+  private
+
+  def leds(stick)
+    stick.info.model.leds
+  end
+
+  # The effect ran to the end (returned true) and left every LED off.
+  def assert_ends_off(stick)
+    assert yield
+    assert_equal [BLACK] * leds(stick), stick.frame
+  end
+
+  # What each effect returned when run with a cancellation already raised.
+  def cancelled_effects(stick, cancel)
+    [stick.blink(:red, period: 0.2, cancel: cancel),
+     stick.pulse(:red, duration: 0.2, cancel: cancel),
+     stick.morph(:red, duration: 0.2, cancel: cancel)]
+  end
+
+  # A second, plain Stick on the same serial, which neither flips nor scales.
+  def plain_frame(serial)
+    Blinkstick.open(serial: serial, &:frame)
   end
 end

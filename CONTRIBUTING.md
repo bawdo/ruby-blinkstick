@@ -47,12 +47,41 @@ that decide a release: if the shared open or the shared read fails on macOS,
 the release stops. Attach a Nano and a Square for the full run; without both,
 the pair test skips with a message.
 
+The newer checks cover, for every attached stick, the brightness limit (a
+limited write reads back scaled), inverse (the frame reads back as written
+while a second, plain handle on the same serial reads the flipped bytes), morph
+ending on its colour, blink and pulse ending off, an effect given an already
+cancelled `Blinkstick::Cancellation` returning `false` and changing nothing,
+`Blinkstick.list(names: true)` returning one entry per stick, and `info.release`
+matching the model (Nano `0x0202`, Square `0x0201`). They write colours only.
+
 Automated tests must never write EEPROM on a real stick: no name, info block
 or mode writes against hardware. EEPROM wears out, and a contributor's stick
 is theirs. These tests set colours and turn the stick off, nothing else.
 
 On Linux you need the udev rule from the `## Linux` section of the
 [README](README.md), then a replug, or the tests fail with a permission error.
+
+### EEPROM check before a release
+
+The automated tests never write EEPROM, so name, info block and mode writes get
+a manual check, once on each OS (macOS and Linux), with one stick attached. Only
+the maintainer runs it; `rake`, `rake hardware` and CI never do.
+
+```sh
+ruby -Ilib scripts/eeprom-check.rb SERIAL --yes-write-eeprom
+```
+
+It exits 2 with a usage message unless it gets both the serial and the
+`--yes-write-eeprom` flag, and also refuses a stick that is not in mode 2 or 3
+(`mode=` cannot restore modes 0 or 1). It saves the stick's name, both info
+blocks and mode, then writes the name `eeprom-check`, info block 2
+`eeprom-check-2` and the mode (the one it is not in, then its own), reading each back. It restores the
+saved name, blocks and mode even if a step fails, and prints a line for every
+write, read and restore. It exits 1 on any mismatch or failed restore. Both
+blocks are restored byte for byte, including a name that is not valid UTF-8.
+The mode is written to whichever of 2 and 3 is not current first, then back, so
+two real writes happen. The script is not part of the gem.
 
 ### Manual check before a release
 
@@ -64,6 +93,10 @@ Run this once on each OS (macOS and Linux) with a stick attached.
 2. Plug the stick back in and run `serial = Blinkstick.list.first.serial`.
    Unplug it again, then run `Blinkstick.open(serial: serial)`. Expect a
    `Blinkstick::NotFoundError`.
+3. Plug the stick back in, then run `stick = Blinkstick.open` and
+   `stick.colour = :green`. Unplug the stick and plug it back in, then run
+   `stick.mode`. Expect it to reconnect and return the mode, with the green
+   frame back on the LEDs.
 
 ## Changes
 
