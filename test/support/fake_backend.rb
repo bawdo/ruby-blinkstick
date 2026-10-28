@@ -9,15 +9,43 @@ class FakeBackend
   Device = Blinkstick::Backend::Device
   Report = Blinkstick::Report
 
+  # The backend every test starts with, so a test that forgets to install a
+  # FakeBackend fails loudly instead of reaching the real stick attached to
+  # the machine running the tests.
+  class Refusing
+    # Raised by every call. Deliberately outside Blinkstick::Error, so no
+    # rescue in the gem or assert_raises in a test can swallow it.
+    class NoBackend < StandardError; end
+
+    MESSAGE = "no backend installed for this test: include FakeBackend::Installer " \
+              "and call install_backend (the real stick is never used by tests)"
+
+    def list
+      raise NoBackend, MESSAGE
+    end
+
+    def open(_device)
+      raise NoBackend, MESSAGE
+    end
+  end
+
+  # The one Refusing backend, which test_helper installs and Installer puts back.
+  REFUSING = Refusing.new.freeze
+
   # What a device keeps whatever handles come and go: its EEPROM (mode and
-  # info blocks), whether it is plugged in, and the handles opened on it.
+  # info blocks), its LEDs, whether it is plugged in, and the handles opened
+  # on it. leds is replaced, never changed in place, so a reference a test
+  # holds stays as it was.
   class DeviceState
-    attr_accessor :mode, :info_blocks, :refusal
+    DARK = Array.new(8, Blinkstick::Colour::OFF).freeze
+
+    attr_accessor :mode, :info_blocks, :refusal, :leds
     attr_reader :handles, :queued
 
     def initialize(mode:, info_blocks:)
       @mode = mode
       @info_blocks = info_blocks.dup
+      @leds = DARK
       @plugged = true
       @refusal = nil
       @handles = []
@@ -33,8 +61,10 @@ class FakeBackend
       @handles.each(&:unplug)
     end
 
+    # A replugged stick starts dark.
     def replug
       @plugged = true
+      @leds = DARK
     end
   end
 
@@ -109,7 +139,7 @@ class FakeBackend
     @states.fetch(serial).unplug
   end
 
-  # The device is listed again; handles opened from now on start dark.
+  # The device is listed again, with every LED dark.
   def replug(serial)
     @states.fetch(serial).replug
   end
@@ -125,15 +155,14 @@ class FakeBackend
   end
 
   # Installs a FakeBackend as Blinkstick::Backend.current for one test and
-  # puts the previous backend back afterwards.
+  # puts the Refusing backend back afterwards, never the real one.
   module Installer
     def install_backend(backend)
-      @previous_backend = Blinkstick::Backend.instance_variable_get(:@current) unless defined?(@previous_backend)
       Blinkstick::Backend.current = backend
     end
 
     def teardown
-      Blinkstick::Backend.current = @previous_backend if defined?(@previous_backend)
+      Blinkstick::Backend.current = REFUSING
       super
     end
   end
@@ -142,7 +171,8 @@ class FakeBackend
 
   def check_openable(device, state)
     raise state.refusal, "#{device.serial} refused" if state.refusal
-    raise Blinkstick::DisconnectedError, "#{device.serial} is unplugged" unless state.plugged?
+    # As hidraw does when the device node is gone (ENOENT or ENODEV).
+    raise Blinkstick::NotFoundError, "#{device.serial} is no longer attached" unless state.plugged?
     raise Blinkstick::BusyError, "#{device.serial} is seized by another program" if @busy
     raise Blinkstick::PermissionError, "#{device.serial}: permission denied" if @permission_denied
   end

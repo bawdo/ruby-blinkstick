@@ -6,6 +6,7 @@ class FakeBackendTest < Minitest::Test
   NANO = FakeBackend.nano
   SQUARE = FakeBackend.square
   FRAME = Blinkstick::Report.frame(Array.new(8, Blinkstick::Colour::OFF))
+  READ = [Blinkstick::Report::FRAME_ID, Blinkstick::Report::FRAME_SIZE].freeze
 
   def test_eeprom_reports_raise_by_default
     handle = FakeBackend.new(NANO).open(NANO)
@@ -99,6 +100,7 @@ class FakeBackendDevicesTest < Minitest::Test
   NANO = FakeBackendTest::NANO
   SQUARE = FakeBackendTest::SQUARE
   FRAME = FakeBackendTest::FRAME
+  READ = FakeBackendTest::READ
 
   def test_unplug_removes_from_list_and_goes_gone
     backend = FakeBackend.new(NANO, SQUARE)
@@ -107,7 +109,7 @@ class FakeBackendDevicesTest < Minitest::Test
 
     assert_equal [SQUARE], backend.list
     assert_raises(Blinkstick::DisconnectedError) { handle.write_feature(FRAME) }
-    assert_raises(Blinkstick::DisconnectedError) { handle.read_feature(1, 25) }
+    assert_raises(Blinkstick::DisconnectedError) { handle.read_feature(*READ) }
   end
 
   def test_replug_lists_again_and_old_handles_stay_gone
@@ -117,7 +119,7 @@ class FakeBackendDevicesTest < Minitest::Test
     backend.replug(NANO.serial)
 
     assert_equal [NANO], backend.list
-    assert_raises(Blinkstick::DisconnectedError) { old.read_feature(1, 25) }
+    assert_raises(Blinkstick::DisconnectedError) { old.read_feature(*READ) }
   end
 
   def test_replug_gives_dark_working_handles
@@ -151,11 +153,12 @@ class FakeBackendDevicesTest < Minitest::Test
     assert_empty FakeBackend.new(NANO).handles_for(NANO.serial)
   end
 
-  def test_open_of_an_unplugged_device_raises_disconnected
+  # As hidraw does: the device node is gone (ENOENT or ENODEV).
+  def test_open_of_an_unplugged_device_raises_not_found
     backend = FakeBackend.new(NANO)
     backend.unplug(NANO.serial)
 
-    assert_raises(Blinkstick::DisconnectedError) { backend.open(NANO) }
+    assert_raises(Blinkstick::NotFoundError) { backend.open(NANO) }
     backend.replug(NANO.serial)
 
     refute_nil backend.open(NANO)
@@ -176,10 +179,87 @@ class FakeBackendDevicesTest < Minitest::Test
     first = backend.open(NANO)
 
     assert_raises(Blinkstick::Backend::TransferFailed) { first.write_feature(FRAME) }
-    assert_raises(Blinkstick::Backend::TransferFailed) { first.read_feature(1, 25) }
+    assert_raises(Blinkstick::Backend::TransferFailed) { first.read_feature(*READ) }
   end
 
   def test_unknown_serial_raises
     assert_raises(KeyError) { FakeBackend.new(NANO).unplug("nope") }
+  end
+end
+
+# The LEDs live on the device, not the handle.
+class FakeBackendLedsTest < Minitest::Test
+  NANO = FakeBackendTest::NANO
+  RED = Blinkstick::Colour.new(red: 255, green: 0, blue: 0)
+  RED_FRAME = Blinkstick::Report.frame(Array.new(8, RED))
+  READ = [Blinkstick::Report::FRAME_ID, Blinkstick::Report::FRAME_SIZE].freeze
+
+  def test_leds_survive_a_reopen_without_unplug
+    backend = FakeBackend.new(NANO)
+    first = backend.open(NANO)
+    first.write_feature(RED_FRAME)
+    first.close
+
+    assert_equal RED_FRAME, backend.open(NANO).read_feature(*READ)
+  end
+
+  def test_two_handles_on_one_serial_share_leds
+    backend = FakeBackend.new(NANO)
+    first = backend.open(NANO)
+    second = backend.open(NANO)
+    first.write_feature(Blinkstick::Report.led(3, RED))
+
+    assert_equal RED, second.leds[3]
+    assert_equal RED, Blinkstick::Report.decode_frame(second.read_feature(*READ), 8)[3]
+  end
+
+  def test_replug_starts_dark
+    backend = FakeBackend.new(NANO)
+    backend.open(NANO).write_feature(RED_FRAME)
+    backend.unplug(NANO.serial)
+    backend.replug(NANO.serial)
+
+    assert_equal FakeBackendTest::FRAME, backend.open(NANO).read_feature(*READ)
+  end
+end
+
+# The backend a test gets when it installs none.
+class FakeBackendDefaultTest < Minitest::Test
+  REFUSED = FakeBackend::Refusing::NoBackend
+
+  # A stand in for a test class: Installer#teardown calls super.
+  class Base
+    def teardown; end
+  end
+
+  class Installing < Base
+    include FakeBackend::Installer
+  end
+
+  def test_default_is_the_refusing_backend
+    assert_same FakeBackend::REFUSING, Blinkstick::Backend.current
+  end
+
+  def test_refusing_backend_never_lists
+    error = assert_raises(REFUSED) { Blinkstick.list }
+
+    assert_match(/install_backend/, error.message)
+  end
+
+  def test_refusing_backend_never_opens
+    assert_raises(REFUSED) { Blinkstick.open(serial: FakeBackendTest::NANO.serial) }
+    assert_raises(REFUSED) { FakeBackend::REFUSING.open(FakeBackendTest::NANO) }
+  end
+
+  def test_refusal_is_not_a_blinkstick_error
+    refute_operator REFUSED, :<, Blinkstick::Error
+  end
+
+  def test_installer_teardown_puts_the_refusing_backend_back
+    installer = Installing.new
+    installer.install_backend(FakeBackend.new)
+    installer.teardown
+
+    assert_same FakeBackend::REFUSING, Blinkstick::Backend.current
   end
 end

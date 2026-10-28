@@ -34,6 +34,20 @@ module EffectsHelpers
     end
   end
 
+  # Reports cancelled once the handle holds the given number of writes,
+  # never from wait, so only the per step check can stop an effect.
+  class CancelAfterWrites < FakeCancel
+    def initialize(handle, writes)
+      super()
+      @handle = handle
+      @writes = writes
+    end
+
+    def cancelled?
+      @handle.writes.size >= @writes
+    end
+  end
+
   def teardown
     @stick&.close
     super
@@ -238,6 +252,15 @@ class MorphTest < Minitest::Test
 
     refute @stick.morph(RED, duration: 1, cancel: FakeCancel.new(cancelled: true))
     assert_equal before, handle.attempts
+  end
+
+  def test_cancel_between_steps_stops_before_the_next_write
+    light(200)
+
+    cancel = CancelAfterWrites.new(handle, 1)
+
+    refute @stick.morph(OFF, duration: 0.06, cancel:)
+    assert_equal [reds(134), [0.02]], [handle.writes, cancel.waits]
   end
 
   def test_cancel_during_morph_leaves_leds_as_they_are

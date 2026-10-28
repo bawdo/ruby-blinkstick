@@ -43,6 +43,22 @@ module HardwareSupport
   # Distinct colours, so a frame read back shows which LED holds which.
   PALETTE = %w[red green blue yellow cyan magenta white orange].freeze
 
+  # Skips unless BLINKSTICK_HARDWARE=1. Otherwise swaps test_helper's
+  # refusing backend for the real one: nil makes Backend.current load the
+  # host's backend on first use.
+  def use_real_backend
+    skip "set BLINKSTICK_HARDWARE=1 (or run `rake hardware`) to drive real sticks" unless
+      ENV["BLINKSTICK_HARDWARE"] == "1"
+
+    Blinkstick::Backend.current = nil
+  end
+
+  # Puts the refusing backend back, so no later test can reach a real stick.
+  def teardown
+    Blinkstick::Backend.current = FakeBackend::REFUSING
+    super
+  end
+
   private
 
   def supported_sticks
@@ -135,9 +151,7 @@ class HardwareTest < Minitest::Test
   include HardwareSupport
 
   def setup
-    return if ENV["BLINKSTICK_HARDWARE"] == "1"
-
-    skip "set BLINKSTICK_HARDWARE=1 (or run `rake hardware`) to drive real sticks"
+    use_real_backend
   end
 
   def test_list_finds_a_supported_stick
@@ -208,9 +222,7 @@ class HardwareLedTest < Minitest::Test
   include HardwareSupport
 
   def setup
-    return if ENV["BLINKSTICK_HARDWARE"] == "1"
-
-    skip "set BLINKSTICK_HARDWARE=1 (or run `rake hardware`) to drive real sticks"
+    use_real_backend
   end
 
   def test_frame_reads_back_what_was_written
@@ -314,9 +326,7 @@ class HardwareFeatureTest < Minitest::Test
   BLACK = Blinkstick::Colour.parse(:black)
 
   def setup
-    return if ENV["BLINKSTICK_HARDWARE"] == "1"
-
-    skip "set BLINKSTICK_HARDWARE=1 (or run `rake hardware`) to drive real sticks"
+    use_real_backend
   end
 
   def test_brightness_limit_reads_back_scaled

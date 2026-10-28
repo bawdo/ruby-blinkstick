@@ -98,7 +98,8 @@ class ColourTest < Minitest::Test
   end
 
   def test_error_hierarchy
-    %i[NotFoundError BusyError PermissionError UnsupportedModelError ClosedError DisconnectedError].each do |name|
+    %i[NotFoundError BusyError PermissionError UnsupportedModelError ClosedError DisconnectedError
+       DuplicateNameError].each do |name|
       assert_operator Blinkstick.const_get(name), :<, Blinkstick::Error
     end
     assert_operator Blinkstick::Error, :<, StandardError

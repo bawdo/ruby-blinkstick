@@ -33,17 +33,18 @@ class CancellationTest < Minitest::Test
     assert_operator monotonic - started, :<, 1
   end
 
+  # The cancel is sent only once the waiter is blocked in wait, so this
+  # proves a cancel wakes a wait already asleep.
   def test_cancel_from_another_thread_wakes_wait
-    canceller = Thread.new do
-      sleep 0.05
-      @token.cancel
-    end
+    waiter = Thread.new { @token.wait(5) }
+    await_sleeping(waiter)
     started = monotonic
+    @token.cancel
 
-    assert @token.wait(5)
+    assert waiter.value
     assert_operator monotonic - started, :<, 1
   ensure
-    canceller&.join
+    waiter&.kill
   end
 
   # ConditionVariable#wait raises RangeError past about 1e18 seconds, so a
@@ -80,6 +81,14 @@ class CancellationTest < Minitest::Test
   end
 
   private
+
+  # Polls until the thread is asleep, for at most two seconds.
+  def await_sleeping(thread)
+    deadline = monotonic + 2
+    Thread.pass until thread.status == "sleep" || monotonic > deadline
+
+    assert_equal "sleep", thread.status, "the waiter never blocked"
+  end
 
   def monotonic
     Process.clock_gettime(Process::CLOCK_MONOTONIC)

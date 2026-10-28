@@ -49,12 +49,12 @@ class EepromTest < Minitest::Test
     assert_equal "", @stick.name
   end
 
-  def test_name_utf8
+  def test_name_utf8_and_frozen
     open_square
     @stick.name = "café"
 
     assert_equal "caf\xC3\xA9".b, handle.writes.last.byteslice(1, 5)
-    assert_equal ["café", Encoding::UTF_8], [@stick.name, @stick.name.encoding]
+    assert_equal(["café", Encoding::UTF_8, true], @stick.name.then { |name| [name, name.encoding, name.frozen?] })
   end
 
   def test_name_returns_invalid_utf8_unscrubbed

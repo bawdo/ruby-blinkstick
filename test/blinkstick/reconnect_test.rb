@@ -303,3 +303,42 @@ class ReconnectFailureTest < Minitest::Test
     @stick = Blinkstick::Stick.new(@backend.open(blank), info, reopen: Blinkstick.send(:reopener, ""))
   end
 end
+
+# A call reconnects at most once, even when it makes two transfers.
+class ReconnectOncePerCallTest < Minitest::Test
+  include ReconnectTestHelpers
+
+  # The seeding read runs out and reconnects; the LED write then fails on
+  # the new handle, which raises rather than reconnecting a second time.
+  def test_led_write_after_a_reconnecting_seed_read
+    stick = open_square(fail_reads: 3)
+    @backend.next_open(SERIAL, fail_writes: 3)
+
+    assert_raises(Blinkstick::DisconnectedError) { stick[2] = :red }
+    assert_kept_new_handle
+    stick[2] = :red
+
+    assert_equal [2, [Report.led(2, RED)]], [handles.size, handles.last.writes]
+  end
+
+  # The same for mode=: its read of report 4 reconnects, then its write fails.
+  def test_mode_write_after_a_reconnecting_mode_read
+    stick = open_square(fail_reads: 3, eeprom_writes: true)
+    @backend.next_open(SERIAL, fail_writes: 3)
+
+    assert_raises(Blinkstick::DisconnectedError) { stick.mode = :ws2812_mirror }
+    assert_kept_new_handle
+    stick.mode = :ws2812_mirror
+
+    assert_equal [2, [Report.mode(3)]], [handles.size, handles.last.writes]
+  end
+
+  private
+
+  # Two handles, and the second still open: the Stick kept it.
+  def assert_kept_new_handle
+    assert_equal 2, handles.size
+    refute_predicate handles.last, :closed?
+    assert_predicate handles.first, :closed?
+  end
+end

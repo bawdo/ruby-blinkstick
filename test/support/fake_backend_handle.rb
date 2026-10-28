@@ -39,8 +39,9 @@ class FakeBackend
   # wrong_id_reads are how many attempts in a row go wrong before the fake
   # behaves (raising TransferFailed, returning one byte too few, or
   # returning the wrong first byte); gone makes every transfer raise
-  # DisconnectedError. The mode and info blocks now live in the device's state,
-  # so they survive reopening; eeprom_writes lets reports 2, 3 and 4 through.
+  # DisconnectedError. The LEDs, mode and info blocks live in the device's
+  # state, so they survive reopening and are shared by every handle on one
+  # serial; eeprom_writes lets reports 2, 3 and 4 through.
   class Handle
     include Eeprom
 
@@ -48,12 +49,10 @@ class FakeBackend
 
     FAILURES = %i[fail_writes fail_reads short_reads wrong_id_reads].freeze
 
-    # leds is replaced, never changed in place, so a reference a test holds
-    # stays as it was. attempts counts every write_feature and read_feature
-    # call, failed or not; writes_by_id counts the writes recorded and
-    # reads_by_id the reads that returned a well formed reply, per report ID.
+    # attempts counts every write_feature and read_feature call, failed or
+    # not; writes_by_id counts the writes recorded and reads_by_id the reads
+    # that returned a well formed reply, per report ID.
     attr_reader :device, :writes, :stream, :attempts, :writes_by_id, :reads_by_id
-    attr_accessor :leds
 
     def initialize(device, state, eeprom_writes: false, gone: false, **failures)
       @device = device
@@ -61,7 +60,6 @@ class FakeBackend
       @eeprom_writes = eeprom_writes
       @gone = gone
       @failures_left = check_failures(failures)
-      @leds = Array.new(8, Blinkstick::Colour::OFF)
       @closed = false
       start_records
     end
@@ -101,6 +99,15 @@ class FakeBackend
     # if the device comes back.
     def unplug
       @gone = true
+    end
+
+    # @return [Array<Colour>] the device's LEDs, whichever handle set them
+    def leds
+      @state.leds
+    end
+
+    def leds=(colours)
+      @state.leds = colours
     end
 
     def close
@@ -151,12 +158,12 @@ class FakeBackend
       end
     end
 
-    # Looks @leds up afresh for each LED, so a write landing part way
+    # Looks the LEDs up afresh for each one, so a write landing part way
     # through shows up in the later LEDs only.
     def frame_reply
       Report.frame(Array.new(8) do |i|
         Thread.pass
-        @leds[i]
+        leds[i]
       end)
     end
 
@@ -165,8 +172,8 @@ class FakeBackend
       id = report.getbyte(0)
       @writes_by_id[id] += 1
       case id
-      when Report::FRAME_ID then @leds = Report.decode_frame(report, 8)
-      when Report::LED_ID then @leds = @leds.dup.tap { |leds| leds[report.getbyte(2)] = rgb(report) }
+      when Report::FRAME_ID then self.leds = Report.decode_frame(report, 8)
+      when Report::LED_ID then self.leds = leds.dup.tap { |colours| colours[report.getbyte(2)] = rgb(report) }
       else apply_eeprom(id, report)
       end
     end

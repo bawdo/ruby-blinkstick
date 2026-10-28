@@ -33,6 +33,28 @@ class ColourRandomTest < Minitest::Test
     end
   end
 
+  # Hands out 10, 20, 30 in turn and records every limit asked for.
+  class CountingRandom
+    attr_reader :limits
+
+    def initialize
+      @limits = []
+    end
+
+    def rand(limit)
+      @limits << limit
+      @limits.size * 10
+    end
+  end
+
+  def test_random_any_draws_one_byte_per_channel_in_order
+    generator = CountingRandom.new
+    colour = Colour.random(random: generator)
+
+    assert_equal [256, 256, 256], generator.limits
+    assert_equal [10, 20, 30], [colour.red, colour.green, colour.blue]
+  end
+
   def test_hue_segments
     {
       0 => [255, 0, 0], 255 => [255, 255, 0], 510 => [0, 255, 0], 765 => [0, 255, 255],
