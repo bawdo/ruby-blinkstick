@@ -6,7 +6,7 @@ gemspec
 
 group :development do
   gem "bundler-audit", "~> 0.9"
-  gem "minitest", "~> 6.0"
+  gem "minitest", "~> 6.1"
   gem "rake", "~> 13.4"
   gem "rubocop", "~> 1.92"
   gem "rubocop-minitest", "~> 0.41"
